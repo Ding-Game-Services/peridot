@@ -1,0 +1,2306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D!NG · Game Boy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@100..900&display=swap" rel="stylesheet">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#0a0a0c; --surface:#13131a; --s2:#1c1c28; --s3:#222230;
+    --border:rgba(255,255,255,0.07); --amber:#f5a623; --amber-d:#c47d0e;
+    --teal:#00d4c8; --text:#e8e8f0; --muted:#6b6b80; --dim:#9090a8;
+    --red:#ff4d6d; --green:#4dff91;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; }
+  .gb-root { min-height:100vh; background:var(--bg); display:flex; flex-direction:column; align-items:center; padding:1.5rem; }
+  .gb-header { width:100%; max-width:900px; display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:1px solid var(--border); }
+  .gb-logo { font-family:'League Spartan'; font-size:2rem; letter-spacing:3px; }
+  .gb-logo span { color:var(--amber); }
+  .gb-badge { display:none; align-items:center; gap:0.5rem; padding:0.35rem 0.85rem; border:1px solid rgba(77,255,145,0.25); border-radius:6px; background:rgba(77,255,145,0.06); font-family:'League Spartan'; font-size:0.7rem; color:var(--green); letter-spacing:0.1em; }
+  .gb-badge.visible { display:flex; }
+  .gb-badge-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .gb-main { display:grid; grid-template-columns:auto 270px; gap:1.5rem; width:100%; max-width:900px; align-items:start; }
+  .gb-unit { background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .gb-screen-wrap { background:#060608; display:flex; align-items:center; justify-content:center; padding:1.5rem; cursor:pointer; }
+  .gb-canvas { image-rendering:pixelated; border-radius:4px; box-shadow:0 0 40px rgba(0,0,0,0.8); display:none; }
+  .gb-canvas.visible { display:block; }
+  .gb-canvas-off { width:480px; height:432px; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:4px; background:#0d0d0d; border:1px dashed rgba(255,255,255,0.08); gap:0.75rem; transition:border-color 0.2s,background 0.2s; }
+  .gb-canvas-off.hidden { display:none; }
+  .gb-canvas-off.drag { border-color:var(--amber); background:rgba(245,166,35,0.06); }
+  .gb-drop-icon { font-size:2.5rem; opacity:0.5; }
+  .gb-drop-text { font-family:'League Spartan'; font-size:1.3rem; letter-spacing:2px; color:var(--muted); }
+  .gb-drop-sub { font-size:0.72rem; color:var(--muted); font-family:'League Spartan'; }
+  .gb-unit-footer { padding:0.85rem 1.5rem; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .rp-bar { display:none; padding:0.4rem 1.5rem; border-top:1px solid var(--border); background:var(--s2); font-family:'League Spartan'; font-size:0.7rem; color:var(--teal); letter-spacing:0.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gb-rom-name { font-family:'League Spartan'; font-size:0.75rem; color:var(--amber); letter-spacing:0.06em; }
+  .gb-fps { font-family:'League Spartan'; font-size:0.68rem; color:var(--muted); }
+  .gb-btns { display:none; gap:0.5rem; padding:0.85rem 1.5rem 1rem; border-top:1px solid var(--border); }
+  .gb-btns.visible { display:flex; }
+  .gb-btn { padding:0.4rem 0.9rem; border-radius:6px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'DM Sans'; font-size:0.78rem; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .gb-btn:hover { background:var(--s3); border-color:rgba(245,166,35,0.25); }
+  .gb-btn.danger { border-color:rgba(255,77,109,0.25); color:var(--red); }
+  .gb-btn.danger:hover { background:rgba(255,77,109,0.08); }
+  .gb-spacer { flex:1; }
+  .gb-sidebar { display:flex; flex-direction:column; gap:1rem; }
+  .gb-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .gb-card-header { padding:0.85rem 1.1rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.6rem; }
+  .gb-card-title { font-family:'League Spartan'; font-size:0.95rem; letter-spacing:2px; }
+  .gb-card-body { padding:1rem 1.1rem; }
+  .pal-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+  .pal-btn { padding:0.55rem 0.75rem; border-radius:8px; border:1px solid var(--border); background:var(--s2); cursor:pointer; transition:all 0.15s; display:flex; align-items:center; gap:0.6rem; width:100%; }
+  .pal-btn:hover { border-color:rgba(245,166,35,0.25); }
+  .pal-btn.on { border-color:var(--amber); background:rgba(245,166,35,0.08); }
+  .pal-swatches { display:flex; gap:2px; }
+  .pal-swatch { width:10px; height:10px; border-radius:2px; }
+  .pal-label { font-family:'League Spartan'; font-size:0.7rem; color:var(--dim); }
+  .key-grid { display:flex; flex-direction:column; gap:0.5rem; }
+  .key-row { display:flex; align-items:center; justify-content:space-between; }
+  .key-action { font-size:0.78rem; color:var(--dim); }
+  .key-chips { display:flex; gap:0.35rem; }
+  .key-chip { padding:0.15rem 0.45rem; border-radius:4px; background:var(--s3); border:1px solid var(--border); font-family:'League Spartan'; font-size:0.62rem; color:var(--text); }
+  .state-rows { display:flex; flex-direction:column; gap:0.4rem; }
+  .state-row { display:flex; justify-content:space-between; font-size:0.75rem; }
+  .state-label { color:var(--muted); }
+  .state-val { font-family:'League Spartan'; font-size:0.7rem; color:var(--amber); }
+  .state-val.dim { color:var(--dim); font-size:0.68rem; }
+  /* Ding Engine Panel */
+  .ach-panel-tabs { display:flex; border-bottom:1px solid var(--border); background:var(--s2); }
+  .ach-panel-tab { padding:0.45rem 0.85rem; font-family:'League Spartan'; font-size:0.64rem; letter-spacing:0.08em; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:all 0.15s; user-select:none; }
+  .ach-panel-tab:hover { color:var(--text); }
+  .ach-panel-tab.on { color:var(--amber); border-bottom-color:var(--amber); }
+  .ach-config-body { padding:0.85rem; display:flex; flex-direction:column; gap:0.6rem; }
+  .ach-field-label { font-family:'League Spartan'; font-size:0.6rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.2rem; }
+  .ach-textarea { width:100%; background:var(--s2); border:1px solid var(--border); border-radius:6px; color:var(--teal); font-family:'League Spartan'; font-size:0.62rem; padding:0.5rem; resize:vertical; min-height:80px; outline:none; transition:border-color 0.15s; line-height:1.5; }
+  .ach-textarea:focus { border-color:rgba(245,166,35,0.4); }
+  .ach-textarea.error { border-color:rgba(255,77,109,0.5); }
+  .ach-parse-btn { width:100%; padding:0.45rem; border-radius:6px; background:rgba(245,166,35,0.1); border:1px solid rgba(245,166,35,0.3); color:var(--amber); font-family:'League Spartan'; font-size:0.7rem; cursor:pointer; transition:all 0.15s; letter-spacing:0.06em; }
+  .ach-parse-btn:hover { background:rgba(245,166,35,0.18); }
+  .ach-parse-status { font-family:'League Spartan'; font-size:0.62rem; padding:0.35rem 0.5rem; border-radius:5px; }
+  .ach-parse-status.ok  { background:rgba(77,255,145,0.08); color:var(--green); border:1px solid rgba(77,255,145,0.2); }
+  .ach-parse-status.err { background:rgba(255,77,109,0.08); color:var(--red);   border:1px solid rgba(255,77,109,0.2); }
+  .ach-gameid-input { width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--amber); font-family:'League Spartan'; font-size:0.7rem; padding:0.35rem 0.5rem; outline:none; transition:border-color 0.15s; }
+  .ach-gameid-input:focus { border-color:rgba(245,166,35,0.4); }
+  .ach-live-body { padding:0.5rem; display:flex; flex-direction:column; gap:0.3rem; max-height:280px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--s3) transparent; }
+  .ach-live-row { display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.6rem; border-radius:6px; background:var(--s2); border:1px solid var(--border); transition:all 0.15s; }
+  .ach-live-row.pass { border-color:rgba(245,166,35,0.3); background:rgba(245,166,35,0.06); }
+  .ach-live-row.done { border-color:rgba(77,255,145,0.25); background:rgba(77,255,145,0.05); opacity:0.6; }
+  .ach-live-indicator { width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--muted); transition:all 0.15s; }
+  .ach-live-row.pass .ach-live-indicator { background:var(--amber); box-shadow:0 0 6px var(--amber); animation:pulse 1s infinite; }
+  .ach-live-row.done .ach-live-indicator { background:var(--green); }
+  .ach-live-icon { font-size:1rem; flex-shrink:0; }
+  .ach-live-name { flex:1; font-size:0.72rem; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ach-live-pts { font-family:'League Spartan'; font-size:0.6rem; color:var(--amber); flex-shrink:0; }
+  .ach-live-tag { font-family:'League Spartan'; font-size:0.58rem; padding:1px 5px; border-radius:3px; flex-shrink:0; }
+  .tag-watching { background:rgba(0,212,200,0.1); color:var(--teal); border:1px solid rgba(0,212,200,0.2); }
+  .tag-unlocked { background:rgba(77,255,145,0.1); color:var(--green); border:1px solid rgba(77,255,145,0.2); }
+  .ach-live-empty { padding:1.25rem; text-align:center; font-family:'League Spartan'; font-size:0.65rem; color:var(--muted); line-height:1.7; }
+  /* Debug panel */
+  .dbg-wrap { width:100%; max-width:900px; margin-top:1.25rem; }
+  .dbg-toggle { width:100%; display:flex; align-items:center; gap:0.75rem; padding:0.6rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:10px; cursor:pointer; font-family:'League Spartan'; font-size:0.9rem; letter-spacing:2px; color:var(--muted); transition:all 0.15s; }
+  .dbg-toggle:hover { border-color:rgba(245,166,35,0.25); color:var(--text); }
+  .dbg-toggle.open { border-radius:10px 10px 0 0; border-bottom-color:transparent; color:var(--amber); }
+  .dbg-toggle-chevron { margin-left:auto; font-size:0.7rem; transition:transform 0.2s; }
+  .dbg-toggle.open .dbg-toggle-chevron { transform:rotate(180deg); }
+  .dbg-dot { width:7px; height:7px; border-radius:50%; background:var(--red); flex-shrink:0; }
+  .dbg-dot.live { background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse 2s infinite; }
+  .dbg-hint { font-family:'League Spartan'; font-size:0.65rem; color:var(--dim); font-weight:400; letter-spacing:0.04em; margin-left:0.5rem; }
+  .dbg-panel { background:var(--surface); border:1px solid var(--border); border-top:none; border-radius:0 0 10px 10px; overflow:hidden; display:none; }
+  .dbg-panel.open { display:block; }
+  .dbg-tabs { display:flex; border-bottom:1px solid var(--border); background:var(--s2); }
+  .dbg-tab { padding:0.5rem 1.1rem; font-family:'League Spartan'; font-size:0.68rem; letter-spacing:0.08em; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:all 0.15s; user-select:none; }
+  .dbg-tab:hover { color:var(--text); }
+  .dbg-tab.on { color:var(--amber); border-bottom-color:var(--amber); }
+  .dbg-body { padding:1rem 1.25rem; }
+  .dbg-empty { color:var(--muted); font-family:'League Spartan'; font-size:0.72rem; padding:1rem 0; }
+  .dbg-reg-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; margin-bottom:1rem; }
+  .dbg-reg { background:var(--s2); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.65rem; }
+  .dbg-reg-name { font-family:'League Spartan'; font-size:0.6rem; color:var(--muted); margin-bottom:0.2rem; letter-spacing:0.1em; }
+  .dbg-reg-val { font-family:'League Spartan'; font-size:0.88rem; color:var(--amber); font-weight:600; }
+  .dbg-reg-sub { font-family:'League Spartan'; font-size:0.58rem; color:var(--dim); margin-top:0.15rem; }
+  .dbg-flags { display:flex; gap:0.4rem; margin-bottom:1rem; flex-wrap:wrap; }
+  .dbg-flag { padding:0.2rem 0.6rem; border-radius:4px; font-family:'League Spartan'; font-size:0.7rem; font-weight:600; border:1px solid var(--border); background:var(--s2); color:var(--muted); }
+  .dbg-flag.set { background:rgba(245,166,35,0.12); border-color:rgba(245,166,35,0.35); color:var(--amber); }
+  .dbg-flag.warn { background:rgba(255,77,109,0.12); border-color:rgba(255,77,109,0.3); color:var(--red); }
+  .dbg-section-label { margin-bottom:0.5rem; font-family:'League Spartan'; font-size:0.6rem; color:var(--muted); letter-spacing:0.1em; }
+  .dbg-io-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.4rem; margin-bottom:1rem; }
+  .dbg-io-row { display:flex; justify-content:space-between; align-items:center; background:var(--s2); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; }
+  .dbg-io-addr { font-family:'League Spartan'; font-size:0.6rem; color:var(--muted); }
+  .dbg-io-name { font-family:'League Spartan'; font-size:0.62rem; color:var(--dim); }
+  .dbg-io-val { font-family:'League Spartan'; font-size:0.72rem; color:var(--teal); font-weight:600; }
+  .dbg-bits-wrap { margin-top:0.75rem; }
+  .dbg-bits-title { font-family:'League Spartan'; font-size:0.6rem; color:var(--muted); letter-spacing:0.1em; margin-bottom:0.4rem; }
+  .dbg-bits { display:flex; gap:0.3rem; flex-wrap:wrap; }
+  .dbg-bit { padding:0.18rem 0.5rem; border-radius:3px; font-family:'League Spartan'; font-size:0.62rem; border:1px solid var(--border); background:var(--s2); color:var(--muted); }
+  .dbg-bit.set { background:rgba(0,212,200,0.1); border-color:rgba(0,212,200,0.3); color:var(--teal); }
+  .dbg-bit.warn { background:rgba(255,77,109,0.1); border-color:rgba(255,77,109,0.3); color:var(--red); }
+  .dbg-int-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:0.5rem; margin-bottom:0.75rem; }
+  .dbg-int-cell { background:var(--s2); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.4rem; text-align:center; }
+  .dbg-int-name { font-family:'League Spartan'; font-size:0.6rem; color:var(--muted); margin-bottom:0.3rem; }
+  .dbg-int-chips { display:flex; gap:0.3rem; justify-content:center; }
+  .dbg-int-chip { padding:0.15rem 0.4rem; border-radius:3px; font-family:'League Spartan'; font-size:0.6rem; background:var(--s3); color:var(--muted); border:1px solid var(--border); }
+  .dbg-int-chip.en { background:rgba(0,212,200,0.1); color:var(--teal); border-color:rgba(0,212,200,0.25); }
+  .dbg-int-chip.pend { background:rgba(245,166,35,0.12); color:var(--amber); border-color:rgba(245,166,35,0.3); }
+  .dbg-mbc-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem; margin-bottom:1rem; }
+  .dbg-mbc-cell { background:var(--s2); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.65rem; }
+  .dbg-mbc-label { font-family:'League Spartan'; font-size:0.58rem; color:var(--muted); margin-bottom:0.2rem; letter-spacing:0.08em; }
+  .dbg-mbc-val { font-family:'League Spartan'; font-size:0.82rem; color:var(--amber); font-weight:600; }
+  .apu-master { display:flex; gap:1rem; padding:0.65rem 0.85rem; background:var(--s2); border-radius:8px; margin-bottom:0.75rem; flex-wrap:wrap; }
+  .apu-master-label { font-family:'League Spartan'; font-size:0.58rem; color:var(--muted); letter-spacing:0.1em; }
+  .apu-master-val { font-family:'League Spartan'; font-size:0.85rem; color:var(--amber); font-weight:600; }
+  .apu-channels { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+  .apu-ch { background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:0.65rem; }
+  .apu-ch.active { border-color:rgba(0,212,200,0.2); }
+  .apu-ch-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem; }
+  .apu-ch-name { font-family:'League Spartan'; font-size:0.7rem; font-weight:600; color:var(--muted); }
+  .apu-ch-name.active { color:var(--teal); }
+  .apu-ch-badge { font-family:'League Spartan'; font-size:0.58rem; padding:1px 6px; border-radius:3px; }
+  .apu-ch-badge.on { background:rgba(0,212,200,0.12); color:var(--teal); border:1px solid rgba(0,212,200,0.25); }
+  .apu-ch-badge.off { background:var(--s3); color:var(--muted); border:1px solid var(--border); }
+  .apu-ch-rows { display:flex; flex-direction:column; gap:0.28rem; }
+  .apu-ch-row { display:flex; justify-content:space-between; font-size:0.7rem; }
+  .apu-ch-key { color:var(--muted); }
+  .apu-ch-val { font-family:'League Spartan'; font-size:0.68rem; color:var(--dim); }
+  .apu-level-wrap { margin-top:0.5rem; }
+  .apu-level-track { height:4px; background:var(--s3); border-radius:2px; overflow:hidden; }
+  .apu-level-fill { height:100%; border-radius:2px; transition:width 0.1s; }
+  .dbg-log { display:flex; flex-direction:column; gap:0.3rem; max-height:280px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--s3) transparent; }
+  .dbg-log-empty { color:var(--muted); font-family:'League Spartan'; font-size:0.72rem; }
+  .dbg-log-entry { display:flex; align-items:baseline; gap:0.6rem; font-family:'League Spartan'; font-size:0.68rem; }
+  .dbg-log-time { color:var(--muted); font-size:0.6rem; flex-shrink:0; }
+  .dbg-log-tag { padding:0.1rem 0.4rem; border-radius:3px; font-size:0.58rem; font-weight:700; letter-spacing:0.06em; flex-shrink:0; }
+  .dbg-log-tag.cpu { background:rgba(0,212,200,0.1); color:var(--teal); }
+  .dbg-log-tag.ppu { background:rgba(77,255,145,0.1); color:var(--green); }
+  .dbg-log-tag.mbc { background:rgba(245,166,35,0.1); color:var(--amber); }
+  .dbg-log-tag.irq { background:rgba(255,77,109,0.1); color:var(--red); }
+  .dbg-log-tag.apu,.dbg-log-tag.ser { background:rgba(155,89,182,0.1); color:#d7a8ff; }
+  .dbg-log-msg { color:var(--dim); flex:1; }
+  /* ── Collapsible cards ── */
+  .gb-card-header {
+    padding:0.85rem 1.1rem; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:0.6rem;
+    cursor:pointer; user-select:none; transition:background 0.15s;
+  }
+  .gb-card-header:hover { background:var(--s2); }
+  .gb-card-chevron {
+    margin-left:auto; font-size:0.6rem; color:var(--muted);
+    transition:transform 0.2s; flex-shrink:0;
+  }
+  .gb-card.collapsed .gb-card-chevron { transform:rotate(-90deg); }
+  .gb-card.collapsed .gb-card-body,
+  .gb-card.collapsed .ach-panel-tabs,
+  .gb-card.collapsed .ach-config-body,
+  .gb-card.collapsed .ach-live-body,
+  .gb-card.collapsed #ach-pane-live,
+  .gb-card.collapsed #ach-pane-config { display:none !important; }
+  .gb-card-header-no-collapse { cursor:default; }
+  .gb-card-header-no-collapse:hover { background:transparent; }
+  /* ── Save card ── */
+  .save-status-row { display:flex; align-items:center; gap:0.5rem; padding:0.55rem 0.75rem; border-radius:6px; background:var(--s2); border:1px solid var(--border); margin-bottom:0.6rem; font-family:'League Spartan'; font-size:0.68rem; }
+  .save-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--muted); transition:all 0.3s; }
+  .save-dot.active { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .save-dot.dirty  { background:var(--amber); box-shadow:0 0 6px var(--amber); animation:pulse 1s infinite; }
+  .save-status-text { flex:1; color:var(--muted); }
+  .save-dest-row { font-family:'League Spartan'; font-size:0.62rem; color:var(--muted); margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem; }
+  .save-dest-val { color:var(--teal); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .save-btns { display:flex; gap:0.5rem; }
+  .save-btns button { flex:1; padding:0.38rem 0; border-radius:5px; font-family:'League Spartan'; font-size:0.65rem; cursor:pointer; transition:all 0.15s; }
+  .save-btn-export { background:transparent; border:1px solid var(--border); color:var(--dim); }
+  .save-btn-export:hover:not(:disabled) { border-color:var(--teal); color:var(--teal); }
+  .save-btn-import { background:transparent; border:1px solid var(--border); color:var(--dim); }
+  .save-btn-import:hover:not(:disabled) { border-color:var(--amber); color:var(--amber); }
+  .save-btn-export:disabled, .save-btn-import:disabled { opacity:0.3; cursor:not-allowed; }
+  .gp-status { display:flex; align-items:center; gap:0.5rem; padding:0.6rem 0.75rem; border-radius:6px; background:var(--s2); border:1px solid var(--border); margin-bottom:0.65rem; font-family:'League Spartan'; font-size:0.68rem; }
+  .gp-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex-shrink:0; transition:all 0.3s; }
+  .gp-dot.connected { background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse 2s infinite; }
+  .gp-status-label { flex:1; color:var(--muted); }
+  .gp-status-label.connected { color:var(--green); }
+  .gp-remap-btn { padding:0.2rem 0.6rem; border-radius:4px; font-family:'League Spartan'; font-size:0.6rem; background:var(--s3); border:1px solid var(--border); color:var(--dim); cursor:pointer; transition:all 0.15s; }
+  .gp-remap-btn:hover { border-color:var(--amber); color:var(--amber); }
+  .gp-remap-btn:disabled { opacity:0.35; cursor:not-allowed; }
+  .gp-map-grid { display:flex; flex-direction:column; gap:0.3rem; margin-bottom:0.65rem; }
+  .gp-map-row { display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0.5rem; border-radius:5px; font-size:0.72rem; transition:background 0.12s; }
+  .gp-map-row.active { background:rgba(245,166,35,0.1); border:1px solid rgba(245,166,35,0.35); }
+  .gp-map-action { flex:1; color:var(--dim); }
+  .gp-map-key { font-family:'League Spartan'; font-size:0.62rem; padding:0.15rem 0.45rem; border-radius:3px; background:var(--s3); border:1px solid var(--border); color:var(--text); text-align:center; min-width:64px; }
+  .gp-map-key.waiting { background:rgba(245,166,35,0.15); border-color:var(--amber); color:var(--amber); animation:pulse 0.8s infinite; }
+  .gp-remap-footer { display:flex; gap:0.5rem; }
+  .gp-remap-footer button { flex:1; padding:0.35rem 0; border-radius:5px; font-family:'League Spartan'; font-size:0.62rem; cursor:pointer; transition:all 0.15s; }
+  .gp-btn-cancel { background:transparent; border:1px solid var(--border); color:var(--muted); }
+  .gp-btn-cancel:hover { border-color:var(--red); color:var(--red); }
+  .gp-btn-reset  { background:transparent; border:1px solid var(--border); color:var(--muted); }
+  .gp-btn-reset:hover { border-color:var(--teal); color:var(--teal); }
+
+  /* ── Merged Controls card ── */
+  .ctrl-tabs { display:flex; background:var(--s2); border-bottom:1px solid var(--border); }
+  .ctrl-tab { flex:1; padding:0.42rem; font-family:'League Spartan'; font-size:0.62rem; letter-spacing:0.06em; color:var(--muted); cursor:pointer; text-align:center; border-bottom:2px solid transparent; transition:all 0.15s; }
+  .ctrl-tab:hover:not(.disabled) { color:var(--text); }
+  .ctrl-tab.on { color:var(--amber); border-bottom-color:var(--amber); }
+  .ctrl-tab.disabled { opacity:0.35; cursor:not-allowed; }
+  .remap-section { padding:0.5rem 0.75rem; }
+  .remap-row { display:flex; align-items:center; gap:0.4rem; padding:0.32rem 0; border-bottom:1px solid var(--border); }
+  .remap-row:last-child { border-bottom:none; }
+  .remap-label { font-size:0.72rem; color:var(--dim); width:74px; flex-shrink:0; }
+  .remap-chips { display:flex; flex-wrap:wrap; gap:0.25rem; flex:1; align-items:center; min-width:0; }
+  .bind-chip { display:inline-flex; align-items:center; gap:2px; padding:0.12rem 0.35rem; border-radius:3px; background:var(--s3); border:1px solid var(--border); font-family:'League Spartan'; font-size:0.6rem; color:var(--text); }
+  .bind-chip-del { background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:0.75rem; padding:0 0 0 2px; line-height:1; }
+  .bind-chip-del:hover { color:var(--red); }
+  .remap-add-btn { padding:0.12rem 0.4rem; border-radius:3px; background:transparent; border:1px solid var(--border); color:var(--muted); font-family:'League Spartan'; font-size:0.58rem; cursor:pointer; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
+  .remap-add-btn:hover { border-color:var(--amber); color:var(--amber); }
+  .remap-add-btn.listening { border-color:var(--amber); color:var(--amber); background:rgba(245,166,35,0.1); animation:pulse 0.8s infinite; }
+  .remap-reset-btn { padding:0.12rem 0.35rem; border-radius:3px; background:transparent; border:1px solid var(--border); color:var(--muted); font-family:'League Spartan'; font-size:0.6rem; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
+  .remap-reset-btn:hover { border-color:var(--teal); color:var(--teal); }
+  .hotkey-section { padding:0.5rem 0.75rem 0.65rem; border-top:1px solid var(--border); background:var(--s2); }
+  .hotkey-section-label { font-family:'League Spartan'; font-size:0.58rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.35rem; }
+  .hotkey-row { display:flex; justify-content:space-between; align-items:center; padding:0.18rem 0; font-size:0.7rem; }
+  .hotkey-action { color:var(--dim); }
+  .hotkey-chips { display:flex; gap:0.25rem; }
+  .hotkey-chip { padding:0.1rem 0.35rem; border-radius:3px; background:var(--s3); border:1px solid var(--border); font-family:'League Spartan'; font-size:0.58rem; color:var(--text); }
+  .ctrl-gp-status { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); font-family:'League Spartan'; font-size:0.65rem; color:var(--green); }
+  .ctrl-gp-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); flex-shrink:0; animation:pulse 2s infinite; }
+  .ctrl-footer { display:flex; gap:0.4rem; padding:0.5rem 0.75rem; border-top:1px solid var(--border); }
+  .toast-wrap { position:fixed; bottom:1.5rem; right:1.5rem; display:flex; flex-direction:column; gap:0.5rem; z-index:9999; pointer-events:none; }
+  .toast { display:flex; align-items:center; gap:0.85rem; padding:0.85rem 1.1rem; background:var(--surface); border:1px solid rgba(245,166,35,0.4); border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.6); min-width:280px; max-width:340px; animation:toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1); pointer-events:auto; }
+  .toast.out { animation:toastOut 0.3s ease forwards; }
+  @keyframes toastIn  { from{opacity:0;transform:translateX(60px) scale(0.92)} to{opacity:1;transform:translateX(0) scale(1)} }
+  @keyframes toastOut { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(60px)} }
+  .toast-icon { font-size:1.8rem; flex-shrink:0; }
+  .toast-body { flex:1; min-width:0; }
+  .toast-label { font-family:'League Spartan'; font-size:0.58rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--amber); margin-bottom:0.2rem; }
+  .toast-name { font-size:0.88rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .toast-desc { font-size:0.7rem; color:var(--dim); margin-top:0.15rem; line-height:1.35; }
+  .toast-pts { font-family:'League Spartan'; font-size:0.72rem; color:var(--amber); font-weight:600; flex-shrink:0; }
+</style>
+</head>
+<body>
+<div class="gb-root">
+
+  <header class="gb-header">
+    <div class="gb-logo">D!NG <span>·</span> GAME BOY</div>
+    <div class="gb-badge" id="running-badge">
+      <div class="gb-badge-dot"></div>
+      <span id="running-game-name">GAME BOY ACTIVE</span>
+    </div>
+  </header>
+
+  <div class="gb-main">
+
+    <!-- Screen unit -->
+    <div class="gb-unit">
+      <div class="gb-screen-wrap" id="screen-wrap">
+        <canvas id="gb-canvas" class="gb-canvas" width="480" height="432"></canvas>
+        <div class="gb-canvas-off" id="canvas-off">
+          <div class="gb-drop-icon">🎮</div>
+          <div class="gb-drop-text">Drop a ROM here</div>
+          <div class="gb-drop-sub">.gb files · MBC0/1/2/3/5</div>
+		  <div class="gb-drop-sub">Ding does not provide players with copyrighted ROMS or BIOSes</div>
+        </div>
+      </div>
+      <div class="rp-bar" id="rp-bar"></div>
+      <div class="gb-unit-footer">
+        <div class="gb-rom-name" id="rom-name">NO ROM LOADED</div>
+        <div class="gb-fps" id="fps-display"></div>
+      </div>
+      <div class="gb-btns" id="gb-btns">
+        <button class="gb-btn" id="btn-pause">⏸ Pause</button>
+        <button class="gb-btn" id="btn-reset">↺ Reset</button>
+        <button class="gb-btn" id="btn-mute">🔊 Mute</button>
+        <div style="display:flex;align-items:center;gap:0.4rem;font-family:'League Spartan';font-size:0.68rem;color:var(--muted)">
+          ⏩
+          <select id="ff-speed" style="background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--dim);font-family:'League Spartan';font-size:0.68rem;padding:0.25rem 0.4rem;cursor:pointer;outline:none;">
+            <option value="2">2×</option>
+            <option value="3">3×</option>
+            <option value="4">4×</option>
+          </select>
+        </div>
+        <button class="gb-btn" id="btn-savestate">💾 Save State</button>
+        <div class="gb-spacer"></div>
+        <button class="gb-btn danger" id="btn-eject">⏏ Eject</button>
+      </div>
+      <input id="rom-input" type="file" accept=".gb" style="display:none">
+    </div>
+
+    <!-- Sidebar -->
+    <div class="gb-sidebar">
+
+      <!-- Palette -->
+      <div class="gb-card" id="card-palette">
+        <div class="gb-card-header" onclick="toggleCard('card-palette')">
+          <span>🎨</span><div class="gb-card-title">PALETTE</div>
+          <div class="gb-card-chevron">▼</div>
+        </div>
+        <div class="gb-card-body"><div class="pal-grid" id="pal-grid"></div></div>
+      </div>
+
+      <!-- Controls (keyboard + controller merged) -->
+      <div class="gb-card" id="card-controls">
+        <div class="gb-card-header" onclick="toggleCard('card-controls')">
+          <span id="ctrl-card-icon">⌨️</span><div class="gb-card-title">CONTROLS</div>
+          <div class="gb-card-chevron">▼</div>
+        </div>
+        <div class="gb-card-body" id="controls-card-body" style="padding:0"></div>
+      </div>
+
+      <!-- Save -->
+      <div class="gb-card" id="card-save">
+        <div class="gb-card-header" onclick="toggleCard('card-save')">
+          <span>💾</span><div class="gb-card-title">SAVE</div>
+          <div class="gb-card-chevron">▼</div>
+        </div>
+        <div class="gb-card-body">
+          <div class="save-status-row">
+            <div class="save-dot none" id="save-dot"></div>
+            <div class="save-status-text" id="save-status-text">No ROM loaded</div>
+          </div>
+          <div class="save-dest-row">
+            <span>Destination:</span>
+            <span class="save-dest-val" id="save-dest-val">—</span>
+          </div>
+          <div class="save-btns">
+            <button class="save-btn-export" id="btn-export-sram" disabled onclick="sramExport()">⬇ Export .sav</button>
+            <button class="save-btn-import" id="btn-import-sram" disabled onclick="sramImport()">⬆ Import .sav</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- D!NG Achievement Engine -->
+      <div class="gb-card" id="card-ding">
+        <div class="gb-card-header" onclick="toggleCard('card-ding')">
+          <span>🏆</span><div class="gb-card-title">D!NG Engine</div>
+          <div class="gb-card-chevron">▼</div>
+        </div>
+        <div class="ach-panel-tabs">
+          <div class="ach-panel-tab on" id="ach-tab-config" data-tab="config">Config</div>
+          <div class="ach-panel-tab" id="ach-tab-live" data-tab="live">Live</div>
+        </div>
+        <!-- Config pane -->
+        <div id="ach-pane-config" class="ach-config-body">
+          <div id="set-status-box" style="padding:0.6rem 0.75rem;border-radius:6px;background:var(--s2);border:1px solid var(--border)">
+            <div id="set-status-label" style="font-family:'League Spartan';font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.3rem;color:var(--muted)">○ No ROM Loaded</div>
+            <div id="set-status-msg" style="font-family:'League Spartan';font-size:0.6rem;color:var(--dim);line-height:1.6">Load a .gb ROM to auto-fetch its achievement set.</div>
+            <div id="set-status-hint" style="display:none;font-family:'League Spartan';font-size:0.58rem;color:var(--muted);margin-top:0.4rem;line-height:1.6"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;font-family:'League Spartan';font-size:0.56rem;color:var(--muted)">
+            <div style="flex:1;height:1px;background:var(--border)"></div>
+            manual override
+            <div style="flex:1;height:1px;background:var(--border)"></div>
+          </div>
+          <div>
+            <div class="ach-field-label">Game ID</div>
+            <input id="ach-gameid" class="ach-gameid-input" type="number" placeholder="e.g. 48">
+          </div>
+          <div>
+            <div class="ach-field-label">Achievement Logic JSON</div>
+            <textarea id="ach-logic-input" class="ach-textarea" rows="5" placeholder='{&#10;  "achievements": [&#10;    {&#10;      "name":"First Clear","icon":"🏆","pts":10,&#10;      "logic":{"core":[{"id":"c0","mem":"0xC100","op":"=","val":"01"},{"id":"c1","mem":"0xC100","op":"=","val":"01","delta":false}]}&#10;    }&#10;  ],&#10;  "leaderboards": []&#10;}'></textarea>
+          </div>
+          <button class="ach-parse-btn" id="ach-load-btn">⚡ Load Manually</button>
+          <div id="ach-parse-status" style="display:none"></div>
+          <div style="font-family:'League Spartan';font-size:0.58rem;color:var(--muted);line-height:1.6">
+            Addr format: <span style="color:var(--teal)">0xCXXX</span> (WRAM C000–DFFF)<br>
+            Use Devkit → Export → 🎮 Copy for Emulator
+          </div>
+        </div>
+        <!-- Live pane -->
+        <div id="ach-pane-live" style="display:none">
+          <div id="ach-live-list" class="ach-live-body">
+            <div class="ach-live-empty">No set loaded.<br>Configure in the Config tab.</div>
+          </div>
+        </div>
+      </div>
+
+<!-- Leaderboards -->
+      <div class="gb-card" id="card-lb">
+        <div class="gb-card-header" onclick="toggleCard('card-lb')">
+          <span>🏅</span><div class="gb-card-title">LEADERBOARDS</div>
+          <div class="gb-card-chevron">▼</div>
+        </div>
+        <div class="gb-card-body" id="lb-card-body" style="padding:0.75rem 1.1rem">
+          <div style="font-family:'League Spartan';font-size:0.65rem;color:var(--muted);text-align:center;padding:0.25rem 0">No leaderboards loaded.</div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar -->
+  </div><!-- /gb-main -->
+
+  <!-- Debug Panel -->
+  <div class="dbg-wrap">
+    <button class="dbg-toggle" id="dbg-toggle">
+      <div class="dbg-dot" id="dbg-dot"></div>
+      DIAGNOSTICS
+      <span class="dbg-hint" id="dbg-hint"></span>
+      <span class="dbg-toggle-chevron">▼</span>
+    </button>
+    <div class="dbg-panel" id="dbg-panel">
+      <div class="dbg-tabs" id="dbg-tabs"></div>
+      <div class="dbg-body" id="dbg-body"></div>
+    </div>
+  </div>
+
+</div><!-- /gb-root -->
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<!-- D!NG offline game database — keyed by ROM MD5 hash, works without a server -->
+<script src="ding-sets.js"></script>
+<!-- D!NG achievement/leaderboard engine — platform-agnostic evaluation logic -->
+<script src="ding-engine.js"></script>
+<!-- D!NG Game Boy emulator core — MMU, Timer, PPU, CPU, APU, GameBoy classes -->
+<script src="gb-core.js"></script>
+
+<script>
+'use strict';
+
+const KEY_MAP_LEGACY = {}; // rebuilt by buildKeyMap() — keep name for compat
+let KEY_MAP = {};
+
+// GB game button actions, in the same order as GP_ACTIONS
+const KB_ACTIONS = [
+  { label:'A button',  gbBtn:4 },
+  { label:'B button',  gbBtn:5 },
+  { label:'Start',     gbBtn:7 },
+  { label:'Select',    gbBtn:6 },
+  { label:'D-pad ↑',  gbBtn:2 },
+  { label:'D-pad ↓',  gbBtn:3 },
+  { label:'D-pad ←',  gbBtn:1 },
+  { label:'D-pad →',  gbBtn:0 },
+];
+
+// Default keyboard bindings: action index → array of key strings
+const KB_DEFAULT_MAP = [
+  ['z','Z'],        // A button
+  ['x','X'],        // B button
+  ['Enter'],        // Start
+  ['Shift'],        // Select
+  ['ArrowUp'],      // D-pad ↑
+  ['ArrowDown'],    // D-pad ↓
+  ['ArrowLeft'],    // D-pad ←
+  ['ArrowRight'],   // D-pad →
+];
+
+let kbMap = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('ding-kb-map'));
+    if (Array.isArray(saved) && saved.length === KB_DEFAULT_MAP.length) return saved;
+  } catch(e) {}
+  return KB_DEFAULT_MAP.map(keys => [...keys]);
+})();
+
+function buildKeyMap() {
+  KEY_MAP = {};
+  KB_ACTIONS.forEach((action, i) => {
+    (kbMap[i] || []).forEach(key => { KEY_MAP[key] = action.gbBtn; });
+  });
+}
+buildKeyMap();
+
+function kbSaveMap() {
+  try { localStorage.setItem('ding-kb-map', JSON.stringify(kbMap)); } catch(e) {}
+}
+
+// Display-friendly key name for binding chips
+function fmtKey(key) {
+  const names = {
+    'ArrowUp':'↑','ArrowDown':'↓','ArrowLeft':'←','ArrowRight':'→',
+    'Enter':'Enter','Shift':'Shift',' ':'Space','Escape':'Esc',
+    'Control':'Ctrl','Alt':'Alt','Meta':'Meta','Tab':'Tab',
+    'Backspace':'Bksp','Delete':'Del','CapsLock':'Caps',
+    'PageUp':'PgUp','PageDown':'PgDn','Home':'Home','End':'End',
+  };
+  return names[key] ?? key;
+}
+
+// KB remap state
+let kbRemapStep   = -1;   // action index being remapped, -1 = idle
+let kbListening   = false;
+
+// ═══════════════════════════════════════════════
+// ACHIEVEMENT SET LOADER
+// ═══════════════════════════════════════════════
+// Fetch achievement set by MD5.
+// 1. Try fetch('./sets/{MD5}.json') — works when served over HTTP.
+// 2. Fall back to DING_SETS[md5] — works offline from file:// via ding-sets.js.
+async function dingFetchSet(crc32hex) {
+  const normalize = (data) => {
+    if (!data) return null;
+    if (Array.isArray(data))
+      return { achievements: data, leaderboards: [], stats: [] };
+    if (Array.isArray(data.achievements))
+      return {
+        achievements: data.achievements,
+        leaderboards: Array.isArray(data.leaderboards) ? data.leaderboards : [],
+        stats:        Array.isArray(data.stats)        ? data.stats        : [],
+      };
+    return null;
+  };
+  try {
+    const res = await fetch(`./sets/${crc32hex}.json`);
+    if (res.ok) {
+      const norm = normalize(await res.json());
+      if (norm) return norm;
+    }
+  } catch (e) {}
+  if (typeof DING_SETS !== 'undefined' && DING_SETS[crc32hex]) {
+    return normalize(DING_SETS[crc32hex]);
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════
+// UI STATE
+// ═══════════════════════════════════════════════
+let gb = null;
+let running = false;
+let paused = false;
+let muted = false;
+let fastForward = false;
+let FF_MULTIPLIER = parseInt(localStorage.getItem('ding-ff-speed') || '4');
+let currentPalette = 'classic';
+let rafId = null;
+let offscreen = null;
+let fpsCount = 0, fpsLast = 0, currentFps = 0;
+let dbgOpen = false;
+let dbgTab = 'cpu';
+let dbgSnap = null;
+let prevSnapState = {};
+let eventLog = [];
+let eventIdCounter = 0;
+let romMd5 = null;
+
+// ── Play Time ─────────────────────────────────────────────────────────────────
+// Seconds accumulated while a ROM with a known database game ID is running and
+// unpaused. Suppressed when the Cockpit is connected (devMode) so developer
+// sessions don't inflate their own totals.
+// Stored in localStorage as a running total and flushed to the server
+// periodically and on eject.
+let playTimeDbGameId  = null;   // set when server confirms a game ID for this ROM
+let playTimeAccum     = 0;      // seconds accumulated this session (not yet flushed)
+let playTimeLastFlush = 0;      // epoch seconds of last server flush
+const PLAY_TIME_FLUSH_INTERVAL = 60; // flush to server every 60 seconds of play
+
+// D!NG runtime — achievement/leaderboard evaluation (engine loaded from ding-engine.js)
+const dingRuntime = new DingRuntime();
+
+// Controls card tab state
+let ctrlTab = 'kb';
+
+// ── Play Time helpers ─────────────────────────────────────────────────────────
+// localStorage key for the committed play-time total for a given game ID.
+function playTimeLsKey(gameId) { return 'ding-playtime-' + gameId; }
+
+// Read the total committed seconds from localStorage for a game ID.
+function playTimeGetStored(gameId) {
+  try { return parseInt(localStorage.getItem(playTimeLsKey(gameId)) || '0', 10) || 0; }
+  catch(e) { return 0; }
+}
+
+// Write seconds to localStorage.
+function playTimeSetStored(gameId, totalSeconds) {
+  try { localStorage.setItem(playTimeLsKey(gameId), String(totalSeconds)); } catch(e) {}
+}
+
+// Flush accumulated seconds to localStorage and optionally to the server.
+// Called on eject, on pause, and every PLAY_TIME_FLUSH_INTERVAL seconds.
+// forceServer=true skips the interval check and always attempts the server POST.
+async function playTimeFlush(forceServer = false) {
+  if (!playTimeDbGameId || playTimeAccum <= 0) return;
+
+  const gameId = playTimeDbGameId;
+  const toAdd  = playTimeAccum;
+  playTimeAccum = 0; // reset before async so a concurrent flush can't double-count
+
+  // Always commit to localStorage immediately — zero dependency, survives crashes
+  const prevTotal = playTimeGetStored(gameId);
+  playTimeSetStored(gameId, prevTotal + toAdd);
+
+  // Flush to server on interval or when forced (eject/page unload)
+  const now = Math.floor(Date.now() / 1000);
+  if (!forceServer && (now - playTimeLastFlush) < PLAY_TIME_FLUSH_INTERVAL) return;
+  playTimeLastFlush = now;
+
+  try {
+    await fetch(`http://localhost:3000/api/playtime/${gameId}`, {
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json' },
+      body:     JSON.stringify({ seconds: toAdd }),
+      keepalive: true, // survives page unload on eject
+    });
+  } catch(e) { /* server not running — localStorage is the fallback */ }
+}
+
+// Called when a game ID is confirmed by the server (ROM load path).
+function playTimeStart(gameId) {
+  playTimeDbGameId  = gameId;
+  playTimeAccum     = 0;
+  playTimeLastFlush = Math.floor(Date.now() / 1000);
+}
+
+// Called on eject — flush remaining time and clear state.
+async function playTimeStop() {
+  await playTimeFlush(true);
+  playTimeDbGameId = null;
+  playTimeAccum    = 0;
+}
+
+// ═══════════════════════════════════════════════
+// SRAM SAVE SYSTEM
+// ═══════════════════════════════════════════════
+let sramFileHandle = null;
+let sramFlushTimer = null;
+
+function sramSize() {
+  if (!gb) return 0;
+  const type = gb.mmu.mbcType;
+  if (type === 2) return 512;
+  const ramSzByte = gb.mmu.fullRom?.[0x149] ?? 0;
+  return [0, 0x800, 0x2000, 0x8000, 0x20000, 0x10000][ramSzByte] || 0;
+}
+
+// ── localStorage fallback ─────────────────────
+function sramLsKey(hash) { return `ding-sram-${hash}`; }
+
+function sramSaveLs() {
+  if (!romMd5 || !gb) return;
+  const sz = sramSize(); if (!sz) return;
+  const b64 = btoa(String.fromCharCode(...gb.mmu.eram.slice(0, sz)));
+  try { localStorage.setItem(sramLsKey(romMd5), b64); } catch(e) {}
+}
+
+function sramLoadLs(crc) {
+  try {
+    const b64 = localStorage.getItem(sramLsKey(crc));
+    if (!b64) return false;
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    if (gb && bytes.length <= gb.mmu.eram.length) { gb.mmu.eram.set(bytes); return true; }
+  } catch(e) {}
+  return false;
+}
+
+// ── File System Access API ────────────────────
+function sramFileName() {
+  const name = document.getElementById('rom-name').textContent.toLowerCase().replace(/\s+/g,'-');
+  return `${name}.sav`;
+}
+
+async function sramWriteFile(handle) {
+  if (!gb) return;
+  const sz = sramSize(); if (!sz) return;
+  try {
+    const w = await handle.createWritable();
+    await w.write(gb.mmu.eram.slice(0, sz));
+    await w.close();
+  } catch(e) { console.warn('[sram] write failed:', e); sramFileHandle = null; }
+}
+
+// ── Auto-flush (debounced 3s after last write) ─
+function sramScheduleFlush() {
+  if (sramFlushTimer) clearTimeout(sramFlushTimer);
+  sramFlushTimer = setTimeout(sramFlush, 3000);
+}
+
+async function sramFlush() {
+  if (!gb?.mmu.sramDirty || !romMd5) return;
+  gb.mmu.sramDirty = false;
+  sramSaveLs();
+  if (sramFileHandle) await sramWriteFile(sramFileHandle);
+  updateSaveCard();
+}
+
+// ── Load save on ROM boot ─────────────────────
+async function sramLoad(crc) {
+  if (!gb || !sramSize()) return;
+  if ('showOpenFilePicker' in window) {
+    try {
+      const [fh]  = await window.showOpenFilePicker({
+        types: [{ description:'Game Boy Save', accept:{'application/octet-stream':['.sav']} }],
+      });
+      const bytes = new Uint8Array(await (await fh.getFile()).arrayBuffer());
+      if (bytes.length <= gb.mmu.eram.length) {
+        gb.mmu.eram.set(bytes);
+        sramFileHandle = fh;
+        pushEvent('cpu', `SRAM loaded: ${(await fh.getFile()).name}`);
+        return;
+      }
+    } catch(e) { /* cancelled — fall through */ }
+  }
+  if (sramLoadLs(crc)) pushEvent('cpu', `SRAM restored from browser storage (${crc})`);
+}
+
+// ── Export .sav ───────────────────────────────
+function sramExport() {
+  if (!gb) return;
+  const sz = sramSize();
+  if (!sz) { alert('This ROM has no battery-backed save RAM.'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([gb.mmu.eram.slice(0, sz)], {type:'application/octet-stream'}));
+  a.download = sramFileName(); a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  pushEvent('cpu', `SRAM exported: ${sramFileName()}`);
+}
+
+// ── Import .sav ───────────────────────────────
+function sramImport() {
+  if (!gb) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.sav';
+  inp.onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length > gb.mmu.eram.length) { alert(`Save too large (${bytes.length} bytes).`); return; }
+    gb.mmu.eram.set(bytes);
+    gb.mmu.sramDirty = true;
+    sramFlush();
+    pushEvent('cpu', `SRAM imported: ${file.name}`);
+  };
+  inp.click();
+}
+
+// ═══════════════════════════════════════════════
+// GAMEPAD
+// ═══════════════════════════════════════════════
+
+const GP_BTN_NAMES = ['A','B','X','Y','LB','RB','LT','RT','Select','Start','L3','R3','↑','↓','←','→'];
+const GP_ACTIONS = [
+  { label:'A button',  gbBtn:4 },
+  { label:'B button',  gbBtn:5 },
+  { label:'Start',     gbBtn:7 },
+  { label:'Select',    gbBtn:6 },
+  { label:'D-pad ↑',  gbBtn:2 },
+  { label:'D-pad ↓',  gbBtn:3 },
+  { label:'D-pad ←',  gbBtn:1 },
+  { label:'D-pad →',  gbBtn:0 },
+];
+
+// Default: action index → array of gamepad button indices (multi-bind supported)
+const GP_DEFAULT_MAP = [
+  [0],   // A button  → A/Cross
+  [1],   // B button  → B/Circle
+  [9],   // Start     → Start/Options
+  [8],   // Select    → Select/View
+  [12],  // D-pad ↑
+  [13],  // D-pad ↓
+  [14],  // D-pad ←
+  [15],  // D-pad →
+];
+
+let gpMap = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('ding-gp-map'));
+    if (Array.isArray(saved) && saved.length === GP_DEFAULT_MAP.length
+        && saved.every(Array.isArray)) return saved;
+  } catch(e) {}
+  return GP_DEFAULT_MAP.map(btns => [...btns]);
+})();
+
+function gpSaveMap() {
+  try { localStorage.setItem('ding-gp-map', JSON.stringify(gpMap)); } catch(e) {}
+}
+
+function gpBtnLabel(btnIdx) {
+  return GP_BTN_NAMES[btnIdx] ?? `Btn ${btnIdx}`;
+}
+
+// Gamepad runtime state
+let gpIndex       = null;
+let gpPrevButtons = [];
+let gpPrevAxes    = [0,0];
+let gpRemapping   = false;   // true while waiting for a button press to add
+let gpRemapStep   = -1;      // action index being remapped
+
+const AXIS_DEAD = 0.5;
+
+// Controls card rendering functions — defined further below after toast helpers
+
+// ── Per-frame gamepad poll ────────────────────────────────────
+function gpPoll() {
+  if (gpIndex === null) return;
+  const gamepads = navigator.getGamepads();
+  const gp = gamepads[gpIndex];
+  if (!gp) return;
+
+  const btns = gp.buttons.map(b => b.value > 0.5);
+
+  // Remap mode: add the next pressed button to the current action
+  if (gpRemapping && gpRemapStep >= 0) {
+    for (let i = 0; i < btns.length; i++) {
+      if (btns[i] && !(gpPrevButtons[i] ?? false)) {
+        if (!gpMap[gpRemapStep].includes(i)) {
+          gpMap[gpRemapStep].push(i);
+          gpSaveMap();
+        }
+        gpRemapping = false;
+        gpRemapStep = -1;
+        renderControlsCard();
+        break;
+      }
+    }
+    gpPrevButtons = btns;
+    return;
+  }
+
+  // Normal input — any mapped button for an action triggers it
+  if (gb) {
+    GP_ACTIONS.forEach((action, i) => {
+      const curPressed  = (gpMap[i] || []).some(bi => btns[bi]           ?? false);
+      const prevPressed = (gpMap[i] || []).some(bi => gpPrevButtons[bi] ?? false);
+      if (curPressed !== prevPressed) gb.pressButton(action.gbBtn, curPressed);
+    });
+
+    const ax = gp.axes[0] ?? 0;
+    const ay = gp.axes[1] ?? 0;
+    const stickRight = ax >  AXIS_DEAD, prevRight = gpPrevAxes[0] >  AXIS_DEAD;
+    const stickLeft  = ax < -AXIS_DEAD, prevLeft  = gpPrevAxes[0] < -AXIS_DEAD;
+    const stickDown  = ay >  AXIS_DEAD, prevDown  = gpPrevAxes[1] >  AXIS_DEAD;
+    const stickUp    = ay < -AXIS_DEAD, prevUp    = gpPrevAxes[1] < -AXIS_DEAD;
+    if (stickRight !== prevRight) gb.pressButton(0, stickRight);
+    if (stickLeft  !== prevLeft)  gb.pressButton(1, stickLeft);
+    if (stickUp    !== prevUp)    gb.pressButton(2, stickUp);
+    if (stickDown  !== prevDown)  gb.pressButton(3, stickDown);
+    gpPrevAxes = [ax, ay];
+  }
+  gpPrevButtons = btns;
+}
+
+// ── Connect / disconnect ──────────────────────────────────────
+window.addEventListener('gamepadconnected', (e) => {
+  gpIndex       = e.gamepad.index;
+  gpPrevButtons = [];
+  gpPrevAxes    = [0, 0];
+  ctrlTab       = 'gp';   // auto-switch to controller tab
+  pushEvent('cpu', `Controller connected: ${e.gamepad.id}`);
+  renderControlsCard();
+});
+
+window.addEventListener('gamepaddisconnected', (e) => {
+  if (e.gamepad.index !== gpIndex) return;
+  gpIndex       = null;
+  gpPrevButtons = [];
+  gpPrevAxes    = [0, 0];
+  if (gpRemapping) { gpRemapping = false; gpRemapStep = -1; }
+  ctrlTab = 'kb';   // fall back to keyboard tab
+  pushEvent('cpu', 'Controller disconnected');
+  renderControlsCard();
+});
+
+
+let channel = null;
+try {
+  channel = new BroadcastChannel('ding-bus');
+  console.log('[ding-bus] Channel created OK');
+} catch(e) {
+  console.warn('[ding-bus] Channel creation failed:', e);
+}
+
+if (channel) {
+  channel.onmessage = (e) => {
+    console.log('[ding-bus] EMU received:', e.data?.type);
+    const msg = e.data;
+    if (!msg?.type) return;
+
+ if (msg.type === 'ding:req-wram' && gb) {
+      const _buf = new Uint8Array(0x4000);
+      _buf.set(gb.mmu.wram,                    0x0000); // WRAM      0xC000–0xDFFF
+      _buf.set(gb.mmu.wram.slice(0, 0x1E00),   0x2000); // Echo RAM  0xE000–0xFDFF
+      _buf.set(gb.mmu.oam,                     0x3E00); // OAM       0xFE00–0xFE9F
+      _buf.set(gb.mmu.io,                      0x3F00); // IO        0xFF00–0xFF7F
+      _buf[0x3F0F] = gb.mmu.ifReg;                      // IF reg    0xFF0F (live)
+      _buf.set(gb.mmu.hram,                    0x3F80); // HRAM      0xFF80–0xFFFE
+      _buf[0x3FFF]  = gb.mmu.ie;                        // IE        0xFFFF
+      channel.postMessage({ type: 'ding:wram', wram: Array.from(_buf), platform: 'GB' });
+      return;
+    }
+
+    if (msg.type === 'ding:req-game-state') {
+      if (romMd5) {
+        channel.postMessage({ type:'ding:game-loaded', md5: romMd5, headerTitle: document.getElementById('rom-name').textContent, activeSet: dingRuntime.hasSet ? true : null, platform: 'GB' });
+      }
+      return;
+    }
+
+    if (msg.type === 'ding:rich-presence') {
+      updateRichPresence(msg.text || '');
+      return;
+    }
+
+    if (msg.type === 'ding:game-title') {
+      if (!msg.title) return;
+      document.getElementById('rom-name').textContent = msg.title.toUpperCase();
+      document.getElementById('running-game-name').textContent = msg.title;
+      return;
+    }
+
+    if (msg.type === 'ding:switch-cancelled') {
+      // Devkit declined the game switch — just log it, emulator keeps running
+      pushEvent('cpu', 'Devkit: game switch cancelled (unsaved changes)');
+      return;
+    }
+
+    if (msg.type === 'ding:load-state') {
+      if (!gb) { pushEvent('cpu', 'Load state failed: no ROM loaded'); return; }
+      try {
+        gb.loadState(msg.state);
+        dingRuntime.reset();
+        pushEvent('cpu', `State loaded from Devkit: ${msg.label||'unnamed'}`);
+      } catch(e) {
+        pushEvent('cpu', `State load failed: ${e.message}`);
+      }
+      return;
+    }
+
+    // Devkit requesting a full state snapshot for save slot
+    if (msg.type === 'ding:req-state') {
+      if (!gb) return;
+      const state = gb.saveState();
+      channel.postMessage({ type: 'ding:state-snapshot', state, label: msg.label || '' });
+      return;
+    }
+
+    // Devkit requests raw SRAM bytes (player save)
+    if (msg.type === 'ding:req-sram') {
+      if (!gb) { channel.postMessage({ type:'ding:sram-data', bytes:[], size:0, md5:romMd5, platform:'GB' }); return; }
+      const sz = sramSize();
+      if (!sz) {
+        channel.postMessage({ type:'ding:sram-data', bytes:[], size:0, md5:romMd5, platform:'GB' });
+        pushEvent('cpu', 'Devkit requested SRAM — this ROM has no battery-backed RAM');
+      } else {
+const bytes = Array.from(gb.mmu.eram.slice(0, sz));
+      channel.postMessage({ type:'ding:sram-data', bytes, size:sz, md5:romMd5, platform:'GB' });
+        pushEvent('cpu', `SRAM sent to Devkit: ${sz.toLocaleString()} bytes`);
+      }
+      return;
+    }
+
+if (msg.type === 'ding:write-mem') {
+      if (!gb) return;
+      const addr = msg.address;
+      const val  = msg.value;
+      if (typeof addr !== 'number' || typeof val !== 'number') return;
+      // Route through mmu.write so MBC/APU/IO side effects fire correctly.
+      // Clamp to GB address space; writes to ROM space are ignored by MBC logic.
+      gb.mmu.write(addr & 0xFFFF, val & 0xFF);
+      pushEvent('cpu',
+        `MEM WRITE  ${addr.toString(16).toUpperCase().padStart(4,'0')} ← 0x${val.toString(16).toUpperCase().padStart(2,'0')}`
+      );
+      return;
+    }
+
+    // Devkit pushes raw SRAM bytes (from a player .sav file)
+    if (msg.type === 'ding:load-sram') {
+      if (!gb) { pushEvent('cpu', 'Load SRAM failed: no ROM loaded'); return; }
+      const bytes = msg.bytes;
+      if (!Array.isArray(bytes) || !bytes.length) { pushEvent('cpu', 'Load SRAM failed: empty payload'); return; }
+      const u8 = new Uint8Array(bytes);
+      if (u8.length > gb.mmu.eram.length) {
+        pushEvent('cpu', `Load SRAM failed: payload ${u8.length} bytes exceeds eram size ${gb.mmu.eram.length}`);
+        return;
+      }
+      gb.mmu.eram.fill(0);
+      gb.mmu.eram.set(u8);
+      gb.mmu.sramDirty = true;
+      dingRuntime.reset();
+      pushEvent('cpu', `Player save loaded from Devkit: ${u8.length.toLocaleString()} bytes${msg.filename ? ' ('+msg.filename+')' : ''}`);
+      return;
+    }
+
+if (msg.type === 'ding:set-update') {
+      const set = msg.achievements;
+      if (!Array.isArray(set) || !set.length) return;
+      const lbs   = msg.leaderboards || [];
+      const stats = msg.stats        || [];
+      dingRuntime.loadSet(set, lbs, stats, msg.gameId ?? null);
+      const lbSuffix   = lbs.length   ? ` · ${lbs.length} LB`                          : '';
+      const statSuffix = stats.length ? ` · ${stats.length} stat${stats.length!==1?'s':''}` : '';
+      updateSetStatus('ok', `✓ ${set.length} achievement${set.length!==1?'s':''} loaded from Cockpit${lbSuffix}${statSuffix}`);
+      achTabSwitch('live');
+      renderAchLive();
+      renderLBCard();
+      pushEvent('cpu', `Set updated from Cockpit: ${set.length} achievements${lbSuffix}${statSuffix}`);
+      return;
+    }
+
+    if (msg.type === 'ding:dev-mode') {
+      // Cockpit connected/disconnected — suppress stat accumulation while paired
+      dingRuntime.setDevMode(!!msg.active);
+      pushEvent('cpu', msg.active ? '[Cockpit] Dev mode ON — stat accumulation suppressed' : '[Cockpit] Dev mode OFF — stat accumulation active');
+      return;
+    }
+  };
+}
+
+offscreen = new OffscreenCanvas(GB_W, GB_H);
+
+// ═══════════════════════════════════════════════
+// RICH PRESENCE
+// ═══════════════════════════════════════════════
+function updateRichPresence(text) {
+  const el = document.getElementById('rp-bar');
+  if (!el) return;
+  el.textContent = text ? '◎  ' + text : '';
+  el.style.display = text ? 'block' : 'none';
+}
+
+// ═══════════════════════════════════════════════
+// SAVE STATE — .ding binary format
+// ═══════════════════════════════════════════════
+const DING_MAGIC   = [0x44, 0x49, 0x4E, 0x47]; // "DING"
+const DING_VERSION = 1;
+const DING_HEADER_SIZE = 64;
+
+function buildDingHeader(crc32hex, label, ts) {
+  const buf = new Uint8Array(DING_HEADER_SIZE);
+  // Magic
+  DING_MAGIC.forEach((b,i) => buf[i]=b);
+  // Version
+  buf[4] = DING_VERSION;
+  // CRC32 as 8 ASCII chars
+  const crcStr = (crc32hex||'00000000').substring(0,8).padEnd(8,'0');
+  for(let i=0;i<8;i++) buf[5+i] = crcStr.charCodeAt(i);
+  // Timestamp (uint32 LE)
+  const t = Math.floor((ts||Date.now())/1000) & 0xFFFFFFFF;
+  buf[13]=t&0xFF; buf[14]=(t>>8)&0xFF; buf[15]=(t>>16)&0xFF; buf[16]=(t>>24)&0xFF;
+  // Label (32 bytes UTF-8, null padded)
+  const enc = new TextEncoder().encode((label||'').substring(0,31));
+  enc.forEach((b,i) => buf[17+i]=b);
+  return buf;
+}
+
+function parseDingHeader(buf) {
+  const view = new Uint8Array(buf, 0, DING_HEADER_SIZE);
+  if (view[0]!==0x44||view[1]!==0x49||view[2]!==0x4E||view[3]!==0x47)
+    throw new Error('Not a .ding save file');
+  if (view[4] !== DING_VERSION)
+    throw new Error(`Unsupported save version: ${view[4]}`);
+  let crc = '';
+  for(let i=5;i<13;i++) crc += String.fromCharCode(view[i]);
+  const ts = view[13]|(view[14]<<8)|(view[15]<<16)|(view[16]<<24);
+  let label = '';
+  for(let i=17;i<49;i++) { if(!view[i]) break; label += String.fromCharCode(view[i]); }
+  return { crc, ts: ts * 1000, label };
+}
+
+function serializeState(gb, crc32hex, label) {
+  const state    = gb.saveState();
+  const stateStr = JSON.stringify(state);
+  const stateEnc = new TextEncoder().encode(stateStr);
+  // 4 bytes for state length, then state bytes
+  const total = DING_HEADER_SIZE + 4 + stateEnc.length;
+  const buf   = new Uint8Array(total);
+  buf.set(buildDingHeader(crc32hex, label, Date.now()), 0);
+  const len = stateEnc.length;
+  buf[DING_HEADER_SIZE+0] = len & 0xFF;
+  buf[DING_HEADER_SIZE+1] = (len>>8)  & 0xFF;
+  buf[DING_HEADER_SIZE+2] = (len>>16) & 0xFF;
+  buf[DING_HEADER_SIZE+3] = (len>>24) & 0xFF;
+  buf.set(stateEnc, DING_HEADER_SIZE + 4);
+  return buf;
+}
+
+function deserializeState(arrayBuf) {
+  const header = parseDingHeader(arrayBuf);
+  const view   = new Uint8Array(arrayBuf);
+  const len    = view[DING_HEADER_SIZE]|(view[DING_HEADER_SIZE+1]<<8)|(view[DING_HEADER_SIZE+2]<<16)|(view[DING_HEADER_SIZE+3]<<24);
+  const stateBytes = view.slice(DING_HEADER_SIZE+4, DING_HEADER_SIZE+4+len);
+  const stateStr   = new TextDecoder().decode(stateBytes);
+  const state      = JSON.parse(stateStr);
+  return { header, state };
+}
+
+async function saveStateToDisk() {
+  if (!gb) return;
+  const label   = document.getElementById('rom-name').textContent;
+  const ts      = new Date().toISOString().slice(0,19).replace('T',' ');
+  const suggest = (romMd5||'UNKNOWN') + '-' + label.toLowerCase().replace(/\s+/g,'-') + '.ding';
+  const buf = serializeState(gb, romMd5, label + ' — ' + ts);
+  
+  if ('showSaveFilePicker' in window) {
+    try {
+      const fh = await window.showSaveFilePicker({
+        suggestedName: suggest,
+        types: [{ description:'D!NG Save State', accept:{'application/octet-stream':['.ding']} }],
+      });
+      const w = await fh.createWritable();
+      await w.write(buf); await w.close();
+      pushEvent('cpu', `State saved: ${suggest}`);
+      return;
+    } catch(e) { if (e.name === 'AbortError') return; }
+  }
+  // Fallback download
+  const blob = new Blob([buf], {type:'application/octet-stream'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = suggest; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  pushEvent('cpu', `State downloaded: ${suggest}`);
+}
+
+// ═══════════════════════════════════════════════
+// PALETTE UI
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// CONTROLS CARD — merged keyboard + controller
+// ═══════════════════════════════════════════════
+function renderControlsCard() {
+  const body = document.getElementById('controls-card-body');
+  if (!body) return;
+  const icon = document.getElementById('ctrl-card-icon');
+  if (icon) icon.textContent = (gpIndex !== null) ? '🎮' : '⌨️';
+  body.innerHTML = '';
+
+  // Tab bar
+  const tabs = document.createElement('div');
+  tabs.className = 'ctrl-tabs';
+
+  const kbBtn = document.createElement('div');
+  kbBtn.className = 'ctrl-tab' + (ctrlTab === 'kb' ? ' on' : '');
+  kbBtn.textContent = '⌨️ Keyboard';
+  kbBtn.onclick = () => { ctrlTab = 'kb'; renderControlsCard(); };
+
+  const gpBtn = document.createElement('div');
+  gpBtn.className = 'ctrl-tab' + (ctrlTab === 'gp' ? ' on' : '') + (gpIndex === null ? ' disabled' : '');
+  gpBtn.textContent = '🎮 Controller';
+  if (gpIndex !== null) gpBtn.onclick = () => { ctrlTab = 'gp'; renderControlsCard(); };
+
+  tabs.appendChild(kbBtn);
+  tabs.appendChild(gpBtn);
+  body.appendChild(tabs);
+
+  if (ctrlTab === 'kb') renderKbPane(body);
+  else                   renderGpPane(body);
+
+  // Hotkeys — always at bottom, not remappable
+  const hk = document.createElement('div');
+  hk.className = 'hotkey-section';
+  hk.innerHTML =
+    '<div class="hotkey-section-label">Hotkeys (fixed)</div>' +
+    [['Pause',        ['P']],
+     ['Fast Forward', ['Tab']]]
+    .map(([action, chips]) =>
+      `<div class="hotkey-row"><div class="hotkey-action">${action}</div><div class="hotkey-chips">${
+        chips.map(k => `<div class="hotkey-chip">${k}</div>`).join('')
+      }</div></div>`
+    ).join('');
+  body.appendChild(hk);
+}
+
+function renderKbPane(body) {
+  const sec = document.createElement('div');
+  sec.className = 'remap-section';
+
+  KB_ACTIONS.forEach((action, i) => {
+    const row = document.createElement('div');
+    row.className = 'remap-row';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'remap-label';
+    lbl.textContent = action.label;
+    row.appendChild(lbl);
+
+    const chips = document.createElement('div');
+    chips.className = 'remap-chips';
+
+    (kbMap[i] || []).forEach(key => {
+      const chip = document.createElement('span');
+      chip.className = 'bind-chip';
+      chip.textContent = fmtKey(key);
+      const del = document.createElement('button');
+      del.className = 'bind-chip-del';
+      del.textContent = '×';
+      del.title = 'Remove binding';
+      del.onclick = () => {
+        kbMap[i] = kbMap[i].filter(k => k !== key);
+        kbSaveMap(); buildKeyMap(); renderControlsCard();
+      };
+      chip.appendChild(del);
+      chips.appendChild(chip);
+    });
+
+    const isListening = kbListening && kbRemapStep === i;
+    const addBtn = document.createElement('button');
+    addBtn.className = 'remap-add-btn' + (isListening ? ' listening' : '');
+    addBtn.textContent = isListening ? 'Press key…' : '+ Add';
+    addBtn.onclick = () => {
+      if (kbListening && kbRemapStep === i) {
+        kbListening = false; kbRemapStep = -1; renderControlsCard(); return;
+      }
+      kbListening = true; kbRemapStep = i; renderControlsCard();
+    };
+    chips.appendChild(addBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'remap-reset-btn';
+    resetBtn.textContent = '↺';
+    resetBtn.title = 'Reset to default';
+    resetBtn.onclick = () => {
+      kbMap[i] = [...KB_DEFAULT_MAP[i]];
+      kbSaveMap(); buildKeyMap(); renderControlsCard();
+    };
+
+    row.appendChild(chips);
+    row.appendChild(resetBtn);
+    sec.appendChild(row);
+  });
+  body.appendChild(sec);
+
+  const footer = document.createElement('div');
+  footer.className = 'ctrl-footer';
+  const resetAll = document.createElement('button');
+  resetAll.className = 'remap-reset-btn';
+  resetAll.style.flex = '1';
+  resetAll.textContent = '↺ Reset All Keyboard Defaults';
+  resetAll.onclick = () => {
+    kbMap = KB_DEFAULT_MAP.map(keys => [...keys]);
+    kbSaveMap(); buildKeyMap(); renderControlsCard();
+  };
+  footer.appendChild(resetAll);
+  body.appendChild(footer);
+}
+
+function renderGpPane(body) {
+  // Controller name bar
+  if (gpIndex !== null) {
+    const gps = navigator.getGamepads()[gpIndex];
+    const statusBar = document.createElement('div');
+    statusBar.className = 'ctrl-gp-status';
+    const dot = document.createElement('div');
+    dot.className = 'ctrl-gp-dot';
+    statusBar.appendChild(dot);
+    const name = document.createElement('span');
+    const id = gps?.id || 'Controller connected';
+    name.textContent = id.length > 34 ? id.slice(0, 34) + '…' : id;
+    statusBar.appendChild(name);
+    body.appendChild(statusBar);
+  }
+
+  const sec = document.createElement('div');
+  sec.className = 'remap-section';
+
+  GP_ACTIONS.forEach((action, i) => {
+    const row = document.createElement('div');
+    row.className = 'remap-row';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'remap-label';
+    lbl.textContent = action.label;
+    row.appendChild(lbl);
+
+    const chips = document.createElement('div');
+    chips.className = 'remap-chips';
+
+    (gpMap[i] || []).forEach(btnIdx => {
+      const chip = document.createElement('span');
+      chip.className = 'bind-chip';
+      chip.textContent = gpBtnLabel(btnIdx);
+      const del = document.createElement('button');
+      del.className = 'bind-chip-del';
+      del.textContent = '×';
+      del.title = 'Remove binding';
+      del.onclick = () => {
+        gpMap[i] = gpMap[i].filter(b => b !== btnIdx);
+        gpSaveMap(); renderControlsCard();
+      };
+      chip.appendChild(del);
+      chips.appendChild(chip);
+    });
+
+    const isListening = gpRemapping && gpRemapStep === i;
+    const addBtn = document.createElement('button');
+    addBtn.className = 'remap-add-btn' + (isListening ? ' listening' : '');
+    addBtn.textContent = isListening ? 'Press button…' : '+ Add';
+    addBtn.disabled = (gpIndex === null);
+    addBtn.onclick = () => {
+      if (gpRemapping && gpRemapStep === i) {
+        gpRemapping = false; gpRemapStep = -1; renderControlsCard(); return;
+      }
+      gpRemapping = true; gpRemapStep = i; renderControlsCard();
+    };
+    chips.appendChild(addBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'remap-reset-btn';
+    resetBtn.textContent = '↺';
+    resetBtn.title = 'Reset to default';
+    resetBtn.onclick = () => {
+      gpMap[i] = [...GP_DEFAULT_MAP[i]];
+      gpSaveMap(); renderControlsCard();
+    };
+
+    row.appendChild(chips);
+    row.appendChild(resetBtn);
+    sec.appendChild(row);
+  });
+  body.appendChild(sec);
+
+  const footer = document.createElement('div');
+  footer.className = 'ctrl-footer';
+  const resetAll = document.createElement('button');
+  resetAll.className = 'remap-reset-btn';
+  resetAll.style.flex = '1';
+  resetAll.textContent = '↺ Reset All Controller Defaults';
+  resetAll.onclick = () => {
+    gpMap = GP_DEFAULT_MAP.map(btns => [...btns]);
+    gpSaveMap(); renderControlsCard();
+  };
+  footer.appendChild(resetAll);
+  body.appendChild(footer);
+}
+
+function buildPaletteUI() {
+  const grid = document.getElementById('pal-grid');
+  grid.innerHTML = '';
+  for (const [key, p] of Object.entries(PALETTES)) {
+    const btn = document.createElement('button');
+    btn.className = 'pal-btn' + (key === currentPalette ? ' on' : '');
+    btn.dataset.key = key;
+    const swatches = p.colors.map(c => `<div class="pal-swatch" style="background:rgb(${c.join(',')})"></div>`).join('');
+    btn.innerHTML = `<div class="pal-swatches">${swatches}</div><div class="pal-label">${p.label}</div>`;
+    btn.onclick = () => selectPalette(key);
+    grid.appendChild(btn);
+  }
+}
+
+function selectPalette(key) {
+  currentPalette = key;
+  if (gb) gb.setPalette(PALETTES[key].colors);
+  document.querySelectorAll('.pal-btn').forEach(b => b.classList.toggle('on', b.dataset.key === key));
+}
+
+// ═══════════════════════════════════════════════
+// ROM LOADING
+// ═══════════════════════════════════════════════
+function loadFile(file) {
+  if (!file || !file.name.endsWith('.gb')) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const buf = e.target.result;
+
+    // Identify ROM
+    const hash = md5(buf);
+    const headerTitle = romHeaderTitle(buf);
+    romMd5 = hash;
+	
+    // Update MD5 display
+const _crcRow = document.getElementById('crc-row');
+    const _crcVal = document.getElementById('crc-val');
+    if (_crcRow) _crcRow.style.display = '';
+    if (_crcVal) _crcVal.textContent = hash;
+
+    // Update set status to loading
+    updateSetStatus('loading', `MD5: ${hash} · "${headerTitle}" · Fetching set…`);
+
+    // Boot emulator
+    gb = new GameBoy();
+    gb.loadROM(buf);
+    gb.setPalette(PALETTES[currentPalette].colors);
+    gb.apu.initAudio();
+    running = true; paused = false;
+    fpsCount = 0; fpsLast = 0; currentFps = 0;
+    prevSnapState = {}; eventLog = [];
+    dingRuntime.reset();
+    // Reset play time — a new game is starting; confirmation comes after server lookup below
+    playTimeDbGameId = null;
+    playTimeAccum    = 0;
+
+    document.getElementById('rom-name').textContent = file.name.replace('.gb','').toUpperCase();
+    document.getElementById('running-game-name').textContent = headerTitle || file.name.replace('.gb','').toUpperCase();
+    document.getElementById('running-badge').classList.add('visible');
+    document.getElementById('gb-canvas').classList.add('visible');
+    document.getElementById('canvas-off').classList.add('hidden');
+    document.getElementById('gb-btns').classList.add('visible');
+const _cardCpu = document.getElementById('card-cpu');
+    if (_cardCpu) _cardCpu.style.display = '';
+    document.getElementById('dbg-dot').classList.add('live');
+    pushEvent('cpu', `ROM loaded: ${file.name} · CRC32: ${hash}`);
+    startLoop();
+
+    // Load SRAM save for this ROM (prompts for file or restores from localStorage)
+    sramFileHandle = null;
+    await sramLoad(hash);
+    updateSaveCard();
+
+    // Broadcast game identity
+channel?.postMessage({ type:'ding:game-loaded', md5: hash, headerTitle, fileName: file.name, platform: 'GB' });
+
+    // Resolve display title from local server — falls back silently if server is not running
+    // Play Time starts here when a database game ID is confirmed.
+    try {
+      const titleRes = await fetch(`http://localhost:3000/api/hash/${hash}`);
+      if (titleRes.ok) {
+        const titleData = await titleRes.json();
+        if (titleData.title) {
+          document.getElementById('rom-name').textContent = titleData.title.toUpperCase();
+          document.getElementById('running-game-name').textContent = titleData.title;
+        }
+        // game_id confirmed by the server — play time tracking is now active
+        if (titleData.game_id) playTimeStart(titleData.game_id);
+      }
+    } catch(e) { /* server not running — play time not tracked for this session */ }
+
+    const setData = await dingFetchSet(hash);
+    if (setData && (setData.achievements.length || setData.leaderboards.length || setData.stats.length)) {
+      const set   = setData.achievements;
+      const lbs   = setData.leaderboards;
+      const stats = setData.stats;
+      // Load any previously persisted stat records before calling loadSet
+      // so the engine can match them to stat definitions on first tick.
+      const gameId = set[0]?._gameId ?? setData.gameId ?? null;
+      const gameKey = 'ding-stats-' + (gameId ?? hash);
+      try {
+        const stored = JSON.parse(localStorage.getItem(gameKey) || 'null');
+        if (Array.isArray(stored)) dingRuntime.loadStatRecords(stored);
+      } catch(e) { /* corrupt localStorage entry — start fresh */ }
+      dingRuntime.loadSet(set, lbs, stats, gameId);
+      const lbSuffix   = lbs.length   ? ` · ${lbs.length} LB`                          : '';
+      const statSuffix = stats.length ? ` · ${stats.length} stat${stats.length!==1?'s':''}` : '';
+      updateSetStatus('ok', `✓ ${set.length} achievement${set.length!==1?'s':''} loaded${lbSuffix}${statSuffix} · ${hash}`);
+      achTabSwitch('live');
+      renderAchLive();
+      renderLBCard();
+      pushEvent('cpu', `Set loaded: ${set.length} achievements${lbSuffix}${statSuffix}`);
+    } else {
+      updateSetStatus('none', `No set found for ${hash}`, `Add to <span style="color:var(--teal)">ding-sets.js</span> for offline use, or place <span style="color:var(--teal)">${hash}.json</span> in <span style="color:var(--amber)">./sets/</span> for server use.`);
+      pushEvent('cpu', `No achievement set for CRC32 ${hash}`);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function setDrag(on) { document.getElementById('canvas-off').classList.toggle('drag', on); }
+
+// ═══════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════
+function startLoop() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(loop);
+}
+
+function loop(ts) {
+  rafId = requestAnimationFrame(loop);
+  if (!gb || paused) return;
+
+  gpPoll();       // controller input first, before frame runs
+
+  // Fast forward: run FF_MULTIPLIER frames per tick, audio muted
+  const framesToRun = fastForward ? FF_MULTIPLIER : 1;
+  for (let i = 0; i < framesToRun; i++) {
+    gb.runFrame();
+    dingTick();
+  }
+
+  fpsCount++;
+  if (ts - fpsLast >= 1000) {
+    currentFps = fpsCount; fpsCount = 0; fpsLast = ts;
+    document.getElementById('fps-display').textContent = currentFps + ' FPS';
+    updateSidebar();
+    updateDebugSnap();
+    if (dbgOpen) renderDebugBody();
+    // Auto-save SRAM if dirty
+    if (gb?.mmu.sramDirty) sramScheduleFlush();
+    updateSaveCard();
+
+    // Play Time — accumulate one second when conditions are met:
+    //   • a game with a confirmed database ID is loaded
+    //   • the emulator is running and not paused
+    //   • the Cockpit is not connected (devMode suppresses developer time)
+    if (playTimeDbGameId && running && !paused && !dingRuntime.devMode) {
+      playTimeAccum++;
+      // Periodic flush every PLAY_TIME_FLUSH_INTERVAL seconds
+      if (playTimeAccum % PLAY_TIME_FLUSH_INTERVAL === 0) playTimeFlush(false);
+    }
+  }
+
+  // Broadcast WRAM ~10x per second (every 6 frames at 60fps)
+  // Kept separate from the 1-second UI update so the devkit stays responsive
+ if (channel && gb && fpsCount % 6 === 0) {
+    const _buf = new Uint8Array(0x4000);
+    _buf.set(gb.mmu.wram,                    0x0000); // WRAM      0xC000–0xDFFF
+    _buf.set(gb.mmu.wram.slice(0, 0x1E00),   0x2000); // Echo RAM  0xE000–0xFDFF
+    _buf.set(gb.mmu.oam,                     0x3E00); // OAM       0xFE00–0xFE9F
+    _buf.set(gb.mmu.io,                      0x3F00); // IO        0xFF00–0xFF7F
+    _buf[0x3F0F] = gb.mmu.ifReg;                      // IF reg    0xFF0F (live)
+    _buf.set(gb.mmu.hram,                    0x3F80); // HRAM      0xFF80–0xFFFE
+    _buf[0x3FFF]  = gb.mmu.ie;                        // IE        0xFFFF
+    channel.postMessage({ type: 'ding:wram', wram: Array.from(_buf), platform: 'GB' });
+  }
+
+  const fb = gb.ppu.framebuf;
+  const img = new ImageData(fb.slice(), GB_W, GB_H);
+  offscreen.getContext('2d').putImageData(img, 0, 0);
+  const canvas = document.getElementById('gb-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(offscreen, 0, 0, GB_W * GB_SCALE, GB_H * GB_SCALE);
+}
+
+// ═══════════════════════════════════════════════
+// D!NG ENGINE TICK
+// ═══════════════════════════════════════════════
+function dingTick() {
+  if (!gb || !dingRuntime.hasSet) return;
+  dingRuntime.tick(dingBuildState(gb));
+}
+
+// ═══════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btn-pause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+  // Flush accumulated time whenever the player pauses — catches time before
+  // any periodic flush would fire and keeps localStorage current
+  if (paused) playTimeFlush(false);
+}
+
+function toggleMute() {
+  muted = !muted;
+  document.getElementById('btn-mute').textContent = muted ? '🔇 Unmute' : '🔊 Mute';
+  const apu = gb?.apu;
+  if (!apu?.ctx) return;
+  if (muted) apu.ctx.suspend().catch(()=>{});
+  else       apu.ctx.resume().catch(()=>{});
+}
+
+function onReset() {
+  if (!gb?.mmu.fullRom) return;
+  const buf = gb.mmu.fullRom.buffer.slice();
+
+  // Battery-backed SRAM persists across a hardware reset — snapshot it
+  // before tearing down the old GameBoy instance, then restore it after
+  // loadROM re-initializes eram to zeroes.
+  const savedEram      = gb.mmu.eram.slice();
+  const savedSramDirty = gb.mmu.sramDirty;
+
+  gb = new GameBoy();
+  gb.loadROM(buf);
+
+  // Restore SRAM — only copy as many bytes as the new eram can hold
+  // (loadROM sizes eram to match the ROM header, so they should be equal,
+  // but the guard prevents an overrun if they ever differ).
+  if (savedEram.length <= gb.mmu.eram.length) {
+    gb.mmu.eram.set(savedEram);
+  } else {
+    gb.mmu.eram.set(savedEram.slice(0, gb.mmu.eram.length));
+  }
+  gb.mmu.sramDirty = savedSramDirty;
+
+  gb.setPalette(PALETTES[currentPalette].colors);
+  gb.apu.initAudio();
+  dingRuntime.reset();
+  prevSnapState = {}; eventLog = [];
+  pushEvent('cpu', 'ROM reset — SRAM preserved');
+}
+
+async function onEject() {
+  sramFlush();
+  sramFileHandle = null;
+  if (rafId) cancelAnimationFrame(rafId); rafId = null;
+  if (gb) gb.apu.stopAudio(); gb = null;
+  running = false; paused = false;
+  // Flush stat records to localStorage before ejecting so nothing is lost
+  if (dingRuntime.statCount > 0) {
+    const gameKey = 'ding-stats-' + (dingRuntime.gameId ?? romMd5 ?? 'unknown');
+    try { localStorage.setItem(gameKey, JSON.stringify(dingRuntime.flushStats())); } catch(e) {}
+  }
+  // Flush play time — force server POST on eject
+  await playTimeStop();
+  dingRuntime.eject();
+  romMd5 = null;
+  document.getElementById('rom-name').textContent = 'NO ROM LOADED';
+  document.getElementById('fps-display').textContent = '';
+  document.getElementById('running-game-name').textContent = 'GAME BOY ACTIVE';
+  document.getElementById('running-badge').classList.remove('visible');
+  document.getElementById('gb-canvas').classList.remove('visible');
+  document.getElementById('canvas-off').classList.remove('hidden');
+  document.getElementById('gb-btns').classList.remove('visible');
+const _cardCpuEj = document.getElementById('card-cpu');
+  if (_cardCpuEj) _cardCpuEj.style.display = 'none';
+  document.getElementById('dbg-dot').classList.remove('live');
+  document.getElementById('dbg-hint').textContent = '';
+  const _crcRowEj = document.getElementById('crc-row');
+  if (_crcRowEj) _crcRowEj.style.display = 'none';
+  updateSetStatus(null, 'Load a .gb ROM to auto-fetch its achievement set.');
+  updateRichPresence('');
+renderAchLive();
+  renderLBCard();
+  document.getElementById('gb-canvas').getContext('2d').clearRect(0, 0, GB_W*GB_SCALE, GB_H*GB_SCALE);
+  dbgSnap = null; if (dbgOpen) renderDebugBody();
+  updateSaveCard();
+}
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  // Intercept key for KB remap mode
+  if (kbListening && kbRemapStep >= 0) {
+    // Ignore pure modifier presses — wait for a real key
+    if (['Control','Shift','Alt','Meta'].includes(e.key)) return;
+    e.preventDefault();
+    const key = e.key;
+    // Don't allow hotkeys to be mapped as game inputs
+    if (key === 'Tab' || key === 'p' || key === 'P') return;
+    if (!kbMap[kbRemapStep].includes(key)) {
+      kbMap[kbRemapStep].push(key);
+      kbSaveMap();
+      buildKeyMap();
+    }
+    kbListening   = false;
+    kbRemapStep   = -1;
+    renderControlsCard();
+    return;
+  }
+  // Hotkeys — always active, not remappable
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (!fastForward && gb) {
+      fastForward = true;
+      gb.apu.ctx?.suspend().catch(()=>{});
+      document.getElementById('fps-display').style.color = 'var(--amber)';
+    }
+    return;
+  }
+  if (e.key === 'p' || e.key === 'P') { if (gb) togglePause(); return; }
+  // Game buttons
+  const btn = KEY_MAP[e.key];
+  if (btn !== undefined && gb) { e.preventDefault(); gb.pressButton(btn, true); }
+});
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'Tab') {
+    fastForward = false;
+    if (gb && !muted) gb.apu.ctx?.resume().catch(()=>{});
+    document.getElementById('fps-display').style.color = '';
+    return;
+  }
+  const btn = KEY_MAP[e.key];
+  if (btn !== undefined && gb) gb.pressButton(btn, false);
+});
+
+// ═══════════════════════════════════════════════
+// SIDEBAR & DEBUG
+// ═══════════════════════════════════════════════
+function updateSidebar() {
+  if (!gb) return;
+  const cpu = gb.cpu;
+  const h = v => '$'+v.toString(16).toUpperCase().padStart(4,'0');
+  const rows = [['PC',h(cpu.pc)],['SP',h(cpu.sp)],['AF',h(cpu.af)],['BC',h(cpu.bc)]];
+const _cpuRows = document.getElementById('cpu-state-rows');
+  if (!_cpuRows) return;
+  _cpuRows.innerHTML = rows.map(([l,v]) =>
+    `<div class="state-row"><span class="state-label">${l}</span><span class="state-val">${v}</span></div>`
+  ).join('');
+}
+
+function updateDebugSnap() {
+  if (!gb) return;
+  const cpu = gb.cpu, mmu = gb.mmu, ppu = gb.ppu;
+  const lcdc = mmu.io[0x40], stat = mmu.io[0x41];
+  dbgSnap = {
+    a:cpu.a,f:cpu.f,b:cpu.b,c:cpu.c,d:cpu.d,e:cpu.e,h:cpu.h,l:cpu.l,
+    pc:cpu.pc,sp:cpu.sp,zf:cpu.zf,nf:cpu.nf,hf:cpu.hf,cf:cpu.cf,
+    ime:cpu.ime,halted:cpu.halted,
+    ly:mmu.io[0x44],lyc:mmu.io[0x45],lcdc,stat,ppuMode:ppu.mode,
+    scy:mmu.io[0x42],scx:mmu.io[0x43],wy:mmu.io[0x4A],wx:mmu.io[0x4B],
+    bgp:mmu.io[0x47],obp0:mmu.io[0x48],obp1:mmu.io[0x49],
+    ie:mmu.ie,ifReg:mmu.ifReg,
+    mbcType:mmu.mbcType,romBank:mmu.romBank,ramBank:mmu.ramBank,
+    ramEn:mmu.ramEn,mbc1Mode:mmu.mbc1Mode,romBanks:mmu.romBanks,
+    div:mmu.io[0x04],tima:mmu.io[0x05],tma:mmu.io[0x06],tac:mmu.io[0x07],
+    sb:mmu.io[0x01],sc:mmu.io[0x02],
+    apu:{...gb.apu.diag},muted,
+  };
+  document.getElementById('dbg-hint').textContent =
+    `PC:$${dbgSnap.pc.toString(16).toUpperCase().padStart(4,'0')} · LY:${dbgSnap.ly} · MODE:${dbgSnap.ppuMode}`;
+  const prev = prevSnapState;
+  const IRQ_NAMES = ['VBlank','STAT','Timer','Serial','Joypad'];
+  if (prev.lcdc!==undefined && !!(lcdc&0x80)!==!!(prev.lcdc&0x80)) pushEvent('ppu',`LCD ${!!(lcdc&0x80)?'enabled':'disabled'}`);
+  if (prev.romBank!==undefined && dbgSnap.romBank!==prev.romBank) pushEvent('mbc',`ROM bank ${prev.romBank}→${dbgSnap.romBank}`);
+  if (prev.ramBank!==undefined && dbgSnap.ramBank!==prev.ramBank) pushEvent('mbc',`RAM bank ${prev.ramBank}→${dbgSnap.ramBank}`);
+  if (prev.ppuMode!==undefined && dbgSnap.ppuMode!==prev.ppuMode && dbgSnap.ppuMode===1) pushEvent('ppu','VBlank (mode 1)');
+  const newIRQ = (dbgSnap.ifReg&~(prev.ifReg??0))&0x1F;
+  for (let i=0;i<5;i++) if (newIRQ&(1<<i)) pushEvent('irq',`${IRQ_NAMES[i]} fired`);
+  if (prev.halted!==undefined && dbgSnap.halted && !prev.halted) pushEvent('cpu','CPU HALT entered');
+  if (prev.halted!==undefined && !dbgSnap.halted && prev.halted) pushEvent('cpu','CPU HALT exited');
+  prevSnapState = dbgSnap;
+}
+
+function pushEvent(tag, msg) {
+  const ts = new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  eventLog.unshift({ts,tag,msg,id:eventIdCounter++});
+  if (eventLog.length>80) eventLog.length=80;
+  if (dbgOpen && dbgTab==='log') renderDebugBody();
+}
+
+function buildDebugTabs() {
+  const tabs = [['cpu','CPU'],['ppu','PPU/IO'],['irq','INTERRUPTS'],['mbc','MBC'],['apu','APU'],['log','EVENT LOG']];
+  document.getElementById('dbg-tabs').innerHTML = tabs.map(([id,label]) =>
+    `<div class="dbg-tab${dbgTab===id?' on':''}" data-tab="${id}">${label}</div>`
+  ).join('');
+  document.querySelectorAll('.dbg-tab').forEach(t => t.onclick = () => { dbgTab=t.dataset.tab; buildDebugTabs(); renderDebugBody(); });
+}
+
+function toggleDebug() {
+  dbgOpen = !dbgOpen;
+  document.getElementById('dbg-toggle').classList.toggle('open', dbgOpen);
+  document.getElementById('dbg-panel').classList.toggle('open', dbgOpen);
+  if (dbgOpen) { buildDebugTabs(); renderDebugBody(); }
+}
+
+function renderDebugBody() {
+  const el = document.getElementById('dbg-body');
+  if (!dbgSnap) { el.innerHTML = '<div class="dbg-empty">No ROM loaded.</div>'; return; }
+  const s = dbgSnap;
+  const h  = v => '$'+v.toString(16).toUpperCase().padStart(2,'0');
+  const h16 = v => '$'+v.toString(16).toUpperCase().padStart(4,'0');
+
+  if (dbgTab === 'cpu') {
+    const regs = [
+      ['A',h(s.a),`${s.a}`],['F',h(s.f),'flags'],['B',h(s.b),`${s.b}`],['C',h(s.c),`${s.c}`],
+      ['D',h(s.d),`${s.d}`],['E',h(s.e),`${s.e}`],['H',h(s.h),`${s.h}`],['L',h(s.l),`${s.l}`],
+      ['PC',h16(s.pc),'program counter'],['SP',h16(s.sp),'stack pointer'],
+      ['AF',h16((s.a<<8)|s.f),'pair'],['BC',h16((s.b<<8)|s.c),'pair'],
+      ['DE',h16((s.d<<8)|s.e),'pair'],['HL',h16((s.h<<8)|s.l),'pair'],
+      ['DIV',h(s.div),'timer divider'],['TIMA',h(s.tima),`TMA:${h(s.tma)}`],
+    ];
+    const regGrid = regs.map(([n,v,sub]) =>
+      `<div class="dbg-reg"><div class="dbg-reg-name">${n}</div><div class="dbg-reg-val">${v}</div><div class="dbg-reg-sub">${sub}</div></div>`
+    ).join('');
+    const flags = [['Z','zf'],['N','nf'],['H','hf'],['C','cf']].map(([n,k]) =>
+      `<div class="dbg-flag${s[k]?' set':''}">${n} ${s[k]?1:0}</div>`
+    ).join('') +
+      `<div class="dbg-flag${s.ime?' set':''}">IME ${s.ime?1:0}</div>` +
+      `<div class="dbg-flag${s.halted?' warn':''}">HALT ${s.halted?1:0}</div>`;
+    el.innerHTML = `<div class="dbg-reg-grid">${regGrid}</div><div class="dbg-section-label">FLAGS</div><div class="dbg-flags">${flags}</div>`;
+
+  } else if (dbgTab === 'ppu') {
+    const ioRows = [
+      ['$FF40','LCDC',h(s.lcdc)],['$FF41','STAT',h(s.stat)],
+      ['$FF44','LY',`${s.ly}`],['$FF45','LYC',`${s.lyc}`],
+      ['$FF42','SCY',`${s.scy}`],['$FF43','SCX',`${s.scx}`],
+      ['$FF4A','WY',`${s.wy}`],['$FF4B','WX',`${s.wx}`],
+      ['$FF47','BGP',h(s.bgp)],['$FF48','OBP0',h(s.obp0)],
+      ['$FF49','OBP1',h(s.obp1)],['MODE',['HBlank','VBlank','OAM','Transfer'][s.ppuMode],`${s.ppuMode}`],
+    ];
+    const ioGrid = ioRows.map(([addr,name,val]) =>
+      `<div class="dbg-io-row"><div><div class="dbg-io-addr">${addr}</div><div class="dbg-io-name">${name}</div></div><div class="dbg-io-val">${val}</div></div>`
+    ).join('');
+    const LCDC_BITS=[[7,'LCD'],[6,'WinMap'],[5,'Win'],[4,'BGData'],[3,'BGMap'],[2,'Spr16'],[1,'SprOn'],[0,'BGOn']];
+    const STAT_BITS=[[6,'LYC IRQ'],[5,'OAM IRQ'],[4,'VBlank IRQ'],[3,'HBlank IRQ'],[2,'LYC=LY']];
+    const lcdcBits = LCDC_BITS.map(([bit,label]) => `<div class="dbg-bit${(s.lcdc>>bit)&1?' set':''}">${label}</div>`).join('');
+    const statBits = STAT_BITS.map(([bit,label]) => `<div class="dbg-bit${(s.stat>>bit)&1?' set':''}">${label}</div>`).join('');
+    el.innerHTML = `<div class="dbg-io-grid">${ioGrid}</div>
+      <div class="dbg-bits-wrap"><div class="dbg-bits-title">LCDC</div><div class="dbg-bits">${lcdcBits}</div></div>
+      <div class="dbg-bits-wrap" style="margin-top:0.65rem"><div class="dbg-bits-title">STAT</div><div class="dbg-bits">${statBits}</div></div>`;
+
+  } else if (dbgTab === 'irq') {
+    const IRQ=[{name:'VBlank',bit:0},{name:'STAT',bit:1},{name:'Timer',bit:2},{name:'Serial',bit:3},{name:'Joypad',bit:4}];
+    const cells = IRQ.map(({name,bit}) => {
+      const en=!!(s.ie&(1<<bit)), pend=!!(s.ifReg&(1<<bit));
+      return `<div class="dbg-int-cell"><div class="dbg-int-name">${name}</div><div class="dbg-int-chips"><div class="dbg-int-chip${en?' en':''}">IE:${en?1:0}</div><div class="dbg-int-chip${pend?' pend':''}">IF:${pend?1:0}</div></div></div>`;
+    }).join('');
+    el.innerHTML = `<div style="margin-bottom:0.5rem;font-family:'League Spartan';font-size:0.6rem;color:var(--muted)">
+      IME: <span style="color:${s.ime?'var(--green)':'var(--red)'}">${s.ime?'ENABLED':'DISABLED'}</span>
+      <span style="margin-left:1.5rem">IE: ${h(s.ie)}</span>
+      <span style="margin-left:1rem">IF: ${h(s.ifReg&0x1F)}</span>
+    </div><div class="dbg-int-grid">${cells}</div>`;
+
+  } else if (dbgTab === 'mbc') {
+    const rows = [['MBC TYPE',`MBC${s.mbcType}`],['ROM BANK',`${s.romBank}`],['RAM BANK',`${s.ramBank}`],
+                  ['RAM EN',s.ramEn?'YES':'NO'],['MBC1 MODE',s.mbcType===1?(s.mbc1Mode?'RAM':'ROM'):'N/A'],['ROM BANKS',`${s.romBanks}`]];
+    el.innerHTML = `<div class="dbg-mbc-grid">${rows.map(([l,v]) =>
+      `<div class="dbg-mbc-cell"><div class="dbg-mbc-label">${l}</div><div class="dbg-mbc-val">${v}</div></div>`
+    ).join('')}</div>`;
+
+  } else if (dbgTab === 'apu') {
+    const a = s.apu;
+    if (!a) { el.innerHTML = '<div class="dbg-empty">No APU data.</div>'; return; }
+    const DUTY=['12.5%','25%','50%','75%'], VOL=['Mute','100%','50%','25%'];
+    const pct = (v,max) => Math.round((v/max)*100);
+    const chHtml = (id, c, color, rows) => `
+      <div class="apu-ch${c?.on?' active':''}">
+        <div class="apu-ch-header"><div class="apu-ch-name${c?.on?' active':''}">${id}</div><div class="apu-ch-badge ${c?.on?'on':'off'}">${c?.on?'ACTIVE':'OFF'}</div></div>
+        <div class="apu-ch-rows">${rows}</div>
+        <div class="apu-level-wrap"><div class="apu-level-track"><div class="apu-level-fill" style="width:${pct(c?.output??0,15)}%;background:${color}"></div></div></div>
+      </div>`;
+    el.innerHTML = `
+      <div class="apu-master">
+        <div><div class="apu-master-label">MASTER</div><div class="apu-master-val">${a.masterOn?'ON':'OFF'}</div></div>
+        <div><div class="apu-master-label">VOL L</div><div class="apu-master-val">${a.volL??'?'}/8</div></div>
+        <div><div class="apu-master-label">VOL R</div><div class="apu-master-val">${a.volR??'?'}/8</div></div>
+        <div style="margin-left:auto"><div class="apu-master-label">AUDIO</div><div class="apu-master-val" style="color:${s.muted?'var(--red)':'var(--green)'}">${s.muted?'MUTED':'LIVE'}</div></div>
+      </div>
+      <div style="font-family:'League Spartan';font-size:0.56rem;color:var(--muted);margin:0.35rem 0 0.75rem 0;line-height:1.4">
+        DBG env0:${a.debug?.envPeriod0BugHits??0} sweep0:${a.debug?.sweepPeriod0ShiftHits??0} muteBits:${a.debug?.masterVolMuteMismatchHits??0}
+        duty50:${a.debug?.duty50MismatchLogged?'TRIG':'0'}
+        <span style="margin-left:0.9rem">TRIG dutyStep:${a.debug?.lastTriggerCh1?.dutyStep??'?'}</span>
+        <span style="margin-left:0.6rem">NR11:${(a.debug?.lastTriggerCh1?.nr11??null)===null?'?':h(a.debug.lastTriggerCh1.nr11)}</span>
+        <span style="margin-left:0.6rem">NR12:${(a.debug?.lastTriggerCh1?.nr12??null)===null?'?':h(a.debug.lastTriggerCh1.nr12)}</span>
+      </div>
+      <div class="apu-channels">
+        ${chHtml('CH1',a.ch1,'var(--teal)',`<div class="apu-ch-row"><span class="apu-ch-key">Vol</span><span class="apu-ch-val">${a.ch1?.vol??0}/15</span></div><div class="apu-ch-row"><span class="apu-ch-key">Duty</span><span class="apu-ch-val">${DUTY[a.ch1?.duty??0]}</span></div>`)}
+        ${chHtml('CH2',a.ch2,'var(--amber)',`<div class="apu-ch-row"><span class="apu-ch-key">Vol</span><span class="apu-ch-val">${a.ch2?.vol??0}/15</span></div>`)}
+        ${chHtml('CH3',a.ch3,'var(--green)',`<div class="apu-ch-row"><span class="apu-ch-key">DAC</span><span class="apu-ch-val">${a.ch3?.dacOn?'on':'off'}</span></div><div class="apu-ch-row"><span class="apu-ch-key">Vol</span><span class="apu-ch-val">${VOL[a.ch3?.volCode??0]}</span></div>`)}
+        ${chHtml('CH4',a.ch4,'var(--red)',`<div class="apu-ch-row"><span class="apu-ch-key">Vol</span><span class="apu-ch-val">${a.ch4?.vol??0}/15</span></div><div class="apu-ch-row"><span class="apu-ch-key">LFSR</span><span class="apu-ch-val">${a.ch4?.narrow?'7-bit':'15-bit'}</span></div>`)}
+      </div>`;
+
+  } else if (dbgTab === 'log') {
+    if (!eventLog.length) {
+      el.innerHTML = '<div class="dbg-log"><div class="dbg-log-empty">No events yet.</div></div>';
+    } else {
+      el.innerHTML = `<div class="dbg-log">${eventLog.map(e =>
+        `<div class="dbg-log-entry"><span class="dbg-log-time">${e.ts}</span><span class="dbg-log-tag ${e.tag}">${e.tag.toUpperCase()}</span><span class="dbg-log-msg">${e.msg}</span></div>`
+      ).join('')}</div>`;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════
+// D!NG ENGINE UI
+// ═══════════════════════════════════════════════
+function updateSetStatus(state, msg, hint) {
+  const box   = document.getElementById('set-status-box');
+  const label = document.getElementById('set-status-label');
+  const msgEl = document.getElementById('set-status-msg');
+  const hintEl= document.getElementById('set-status-hint');
+
+  const styles = {
+    ok:      { bg:'rgba(0,230,118,0.07)',  border:'1px solid rgba(0,230,118,0.25)',  color:'var(--green)',  text:'● Set Active'    },
+    none:    { bg:'rgba(255,171,0,0.07)',  border:'1px solid rgba(255,171,0,0.25)',  color:'var(--amber)',  text:'○ No Set Found'  },
+    loading: { bg:'rgba(0,212,200,0.07)',  border:'1px solid rgba(0,212,200,0.25)',  color:'var(--teal)',   text:'◌ Loading…'      },
+    null:    { bg:'var(--s2)',             border:'1px solid var(--border)',          color:'var(--muted)',  text:'○ No ROM Loaded' },
+  };
+  const st = styles[state] || styles.null;
+  box.style.background = st.bg;
+  box.style.border     = st.border;
+  label.style.color    = st.color;
+  label.textContent    = st.text;
+  msgEl.innerHTML      = msg || '';
+  hintEl.style.display = hint ? '' : 'none';
+  hintEl.innerHTML     = hint || '';
+
+  // Update live tab label
+  const liveTab = document.getElementById('ach-tab-live');
+  const earned = dingRuntime.unlocked.size;
+  liveTab.textContent = earned > 0 ? `Live ${earned}/${dingRuntime.achCount}` : 'Live';
+}
+
+function achTabSwitch(tab) {
+  document.getElementById('ach-pane-config').style.display = tab==='config'?'flex':'none';
+  document.getElementById('ach-pane-live').style.display   = tab==='live'?'block':'none';
+  document.getElementById('ach-tab-config').classList.toggle('on', tab==='config');
+  document.getElementById('ach-tab-live').classList.toggle('on',   tab==='live');
+}
+
+function renderAchLive() {
+  const list    = document.getElementById('ach-live-list');
+  const liveTab = document.getElementById('ach-tab-live');
+  const earned  = dingRuntime.unlocked.size;
+  liveTab.textContent = earned > 0 ? `Live ${earned}/${dingRuntime.achCount}` : 'Live';
+
+  if (!dingRuntime.achCount) {
+    list.innerHTML = '<div class="ach-live-empty">No set loaded.<br>Configure in the Config tab.</div>';
+    return;
+  }
+  const items = dingRuntime.getAchievements(gb ? dingBuildState(gb) : null);
+  list.innerHTML = items.map(({ ach, unlocked, passing }) => {
+    const cls = unlocked ? 'done' : passing ? 'pass' : '';
+    const tag = unlocked
+      ? `<div class="ach-live-tag tag-unlocked">UNLOCKED</div>`
+      : `<div class="ach-live-tag tag-watching">LIVE</div>`;
+    return `<div class="ach-live-row ${cls}">
+      <div class="ach-live-indicator"></div>
+      <div class="ach-live-icon">${ach.icon||'🏆'}</div>
+      <div class="ach-live-name">${ach.name}</div>
+      <div class="ach-live-pts">${ach.pts}p</div>
+      ${tag}
+    </div>`;
+  }).join('');
+}
+
+function achLoadManual() {
+  const raw = document.getElementById('ach-logic-input').value.trim();
+  const gid = parseInt(document.getElementById('ach-gameid').value, 10);
+  const statusEl = document.getElementById('ach-parse-status');
+  const ta = document.getElementById('ach-logic-input');
+  statusEl.style.display = 'block';
+  ta.classList.remove('error');
+
+  if (!raw) { ta.classList.add('error'); statusEl.className='ach-parse-status err'; statusEl.textContent='✕ Paste achievement logic JSON first.'; return; }
+
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) {
+    ta.classList.add('error'); statusEl.className='ach-parse-status err'; statusEl.textContent='✕ JSON error: '+e.message; return;
+  }
+
+  // Accept plain array (old format) or unified { achievements, leaderboards } object
+  let achArr, lbArr;
+  if (Array.isArray(parsed)) {
+    achArr = parsed; lbArr = [];
+  } else if (parsed && Array.isArray(parsed.achievements)) {
+    achArr = parsed.achievements;
+    lbArr  = Array.isArray(parsed.leaderboards) ? parsed.leaderboards : [];
+  } else {
+    ta.classList.add('error'); statusEl.className='ach-parse-status err';
+    statusEl.textContent='✕ Expected a JSON array or { achievements, leaderboards } object.'; return;
+  }
+
+  if (!achArr.length && !lbArr.length) {
+    ta.classList.add('error'); statusEl.className='ach-parse-status err';
+    statusEl.textContent='✕ No achievements or leaderboards found.'; return;
+  }
+
+  let idCtr = 0;
+  achArr.forEach(a => {
+    const assignIds = cs => cs?.forEach(c => { if (!c.id) c.id = 'mc'+idCtr++; });
+    assignIds(a.logic?.core); a.logic?.alts?.forEach(assignIds);
+  });
+  lbArr.forEach(lb => {
+    const ap = a => a?.forEach(c => { if (!c.id) c.id = 'mclb'+idCtr++; });
+    ap(lb.start); ap(lb.cancel); ap(lb.submit); ap(lb.value);
+  });
+  const statArr = Array.isArray(parsed.stats) ? parsed.stats : [];
+  statArr.forEach(s => {
+    const ap = a => a?.forEach(c => { if (!c.id) c.id = 'mcst'+idCtr++; });
+    ap(s.trigger); ap(s.value);
+  });
+
+  const gameId = isNaN(gid) ? (parsed.gameId ?? null) : gid;
+  dingRuntime.loadSet(achArr, lbArr, statArr, gameId);
+
+  const lbMsg   = lbArr.length   ? ` · ${lbArr.length} LB${lbArr.length!==1?'s':''}`                       : '';
+  const statMsg = statArr.length ? ` · ${statArr.length} stat${statArr.length!==1?'s':''}`                  : '';
+  statusEl.className='ach-parse-status ok';
+  statusEl.textContent=`✓ Loaded ${achArr.length} achievement${achArr.length!==1?'s':''}${lbMsg}${statMsg}${gameId!==null?' · Game ID '+gameId:''}`;
+  achTabSwitch('live');
+  renderAchLive();
+  renderLBCard();
+}
+
+// ═══════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════
+const _toastQueue = [];
+let _toastBusy = false;
+
+function playUnlockChime() {
+  const ctx = gb?.apu?.ctx;
+  if (!ctx || muted) return;
+  // Two-note ascending chime: C5 then E5, short attack, quick decay
+  [[523.25, 0], [659.25, 0.18]].forEach(([freq, delay]) => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const t = ctx.currentTime + delay;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.4, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.start(t);
+    osc.stop(t + 0.5);
+  });
+}
+
+function showToast(ach) {
+  _toastQueue.push(ach);
+  if (!_toastBusy) _nextToast();
+}
+
+function _nextToast() {
+  if (!_toastQueue.length) { _toastBusy = false; return; }
+  _toastBusy = true;
+  const ach  = _toastQueue.shift();
+  const wrap = document.getElementById('toast-wrap');
+  const el   = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `
+    <div class="toast-icon">${ach.icon||'🏆'}</div>
+    <div class="toast-body">
+      <div class="toast-label">Achievement Unlocked</div>
+      <div class="toast-name">${ach.name}</div>
+      <div class="toast-desc">${ach.desc||''}</div>
+    </div>
+    <div class="toast-pts">+${ach.pts}p</div>`;
+  wrap.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('out');
+    el.addEventListener('animationend', () => { el.remove(); _nextToast(); }, { once:true });
+  }, 4000);
+}
+
+// ═══════════════════════════════════════════════
+// COLLAPSIBLE CARDS
+// ═══════════════════════════════════════════════
+const CARD_DEFAULTS = {
+  'card-palette':    false,
+  'card-controls':   false,
+  'card-save':       false,
+  'card-cpu':        false,
+  'card-info':       true,
+  'card-ding':       false,
+  'card-lb':         false,
+};
+
+function cardLoadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('ding-cards') || '{}');
+    Object.entries(CARD_DEFAULTS).forEach(([id, defaultCollapsed]) => {
+      const collapsed = saved[id] ?? defaultCollapsed;
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('collapsed', collapsed);
+    });
+  } catch(e) {}
+}
+
+function cardSaveState() {
+  const state = {};
+  Object.keys(CARD_DEFAULTS).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) state[id] = el.classList.contains('collapsed');
+  });
+  try { localStorage.setItem('ding-cards', JSON.stringify(state)); } catch(e) {}
+}
+
+function toggleCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  cardSaveState();
+}
+
+// ═══════════════════════════════════════════════
+// LEADERBOARD CARD UI
+// ═══════════════════════════════════════════════
+function renderLBCard() {
+  const body = document.getElementById('lb-card-body');
+  if (!body) return;
+  const items = dingRuntime.getLeaderboards().filter(({ lb }) => !lb.hidden);
+  if (!items.length) {
+    body.innerHTML = '<div style="font-family:\'League Spartan\';font-size:0.65rem;color:var(--muted);text-align:center;padding:0.25rem 0">' +
+      (dingRuntime.lbCount ? 'All leaderboards are hidden.' : 'No leaderboards loaded.') + '</div>';
+    return;
+  }
+  body.innerHTML = '';
+  items.forEach(({ lb, state: st }, idx) => {
+    if (!st) return;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0;border-bottom:1px solid var(--border);';
+    if (idx === items.length - 1) row.style.borderBottom = 'none';
+
+    const dot = document.createElement('div');
+    dot.style.cssText = `width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${st.active ? 'var(--amber)' : st.lastValue !== null ? 'var(--green)' : 'var(--muted)'};${st.active ? 'box-shadow:0 0 6px var(--amber);animation:pulse 1s infinite;' : ''}`;
+    row.appendChild(dot);
+
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0;';
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-family:\'League Spartan\';font-size:0.72rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    title.textContent = lb.title;
+    info.appendChild(title);
+
+    const sub = document.createElement('div');
+    sub.style.cssText = 'font-family:\'League Spartan\';font-size:0.6rem;margin-top:0.1rem;';
+    if (st.active) {
+      sub.style.color = 'var(--amber)';
+      sub.textContent = 'TRACKING…';
+    } else if (st.lastFormatted !== null) {
+      const ts = st.lastTs ? new Date(st.lastTs).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+      sub.style.color = 'var(--teal)';
+      sub.textContent = st.lastFormatted + (ts ? '  ·  ' + ts : '');
+    } else {
+      sub.style.color = 'var(--muted)';
+      sub.textContent = 'Waiting for start condition…';
+    }
+    info.appendChild(sub);
+    row.appendChild(info);
+
+    if (st.personalBest !== null) {
+      const pb = document.createElement('div');
+      pb.style.cssText = 'font-family:\'League Spartan\';font-size:0.58rem;color:var(--amber);flex-shrink:0;text-align:right;';
+      pb.textContent = 'PB ' + formatLBValue(st.personalBest, lb.format);
+      row.appendChild(pb);
+    }
+    body.appendChild(row);
+  });
+}
+
+function playLBChime() {
+  const ctx = gb?.apu?.ctx;
+  if (!ctx || muted) return;
+  // Descending two-note chime to distinguish from achievement unlock
+  [[659.25, 0], [523.25, 0.15]].forEach(([freq, delay]) => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine'; osc.frequency.value = freq;
+    const t = ctx.currentTime + delay;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.35, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    osc.start(t); osc.stop(t + 0.45);
+  });
+}
+
+function showLBToast(lb, formatted, isNewPB) {
+  playLBChime();
+  const wrap = document.getElementById('toast-wrap');
+  const el   = document.createElement('div');
+  el.className = 'toast';
+  // Override border color to teal for LB toasts
+  el.style.borderColor = 'rgba(0,212,200,0.5)';
+  el.innerHTML = `
+    <div class="toast-icon">🏅</div>
+    <div class="toast-body">
+      <div class="toast-label" style="color:var(--teal)">${isNewPB ? 'New Personal Best!' : 'Score Submitted'}</div>
+      <div class="toast-name">${lb.title}</div>
+      <div class="toast-desc">${formatted}${lb.lowerIsBetter ? ' (lower is better)' : ''}</div>
+    </div>`;
+  wrap.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('out');
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+  }, 4000);
+}
+
+// ═══════════════════════════════════════════════
+// SAVE CARD UI
+// ═══════════════════════════════════════════════
+function updateSaveCard() {
+  const dot   = document.getElementById('save-dot');
+  const text  = document.getElementById('save-status-text');
+  const dest  = document.getElementById('save-dest-val');
+  const expBtn = document.getElementById('btn-export-sram');
+  const impBtn = document.getElementById('btn-import-sram');
+  if (!dot || !text) return;
+
+  if (!gb || !romMd5) {
+    dot.className = 'save-dot none';
+    text.textContent = 'No ROM loaded';
+    dest.textContent = '—';
+    expBtn.disabled = true;
+    impBtn.disabled = true;
+    return;
+  }
+
+  const sz = sramSize();
+  if (!sz) {
+    dot.className = 'save-dot none';
+    text.textContent = 'No save RAM (this game)';
+    dest.textContent = '—';
+    expBtn.disabled = true;
+    impBtn.disabled = true;
+    return;
+  }
+
+  expBtn.disabled = false;
+  impBtn.disabled = false;
+
+  const dirty = gb.mmu.sramDirty;
+  if (dirty) {
+    dot.className = 'save-dot dirty';
+    text.textContent = 'Unsaved changes…';
+  } else {
+    dot.className = 'save-dot active';
+    text.textContent = 'Saved';
+  }
+
+  if (sramFileHandle) {
+    dest.textContent = sramFileHandle.name;
+    dest.title = sramFileHandle.name;
+  } else {
+    dest.textContent = 'Browser storage';
+    dest.title = `localStorage key: ding-sram-${romMd5}`;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+buildPaletteUI();
+cardLoadState(); // restore collapsed state from localStorage
+
+// Wire up static buttons
+document.getElementById('btn-pause').onclick  = togglePause;
+document.getElementById('btn-reset').onclick  = onReset;
+document.getElementById('btn-mute').onclick   = toggleMute;
+document.getElementById('btn-savestate').onclick    = saveStateToDisk;
+
+// Fast forward speed selector
+const ffSpeedEl = document.getElementById('ff-speed');
+ffSpeedEl.value = String(FF_MULTIPLIER);
+ffSpeedEl.addEventListener('change', () => {
+  FF_MULTIPLIER = parseInt(ffSpeedEl.value);
+  localStorage.setItem('ding-ff-speed', ffSpeedEl.value);
+});
+document.getElementById('btn-eject').onclick  = onEject;
+document.getElementById('dbg-toggle').onclick = toggleDebug;
+document.getElementById('ach-load-btn').onclick = achLoadManual;
+
+// Achievement panel tabs
+document.getElementById('ach-tab-config').onclick = () => achTabSwitch('config');
+document.getElementById('ach-tab-live').onclick   = () => achTabSwitch('live');
+
+// Wire D!NG runtime callbacks
+dingRuntime.onUnlock(ach => {
+  playUnlockChime();
+  showToast(ach);
+  channel?.postMessage({
+    type: 'ding:unlock',
+    gameId: dingRuntime.gameId,
+    achievement: { name:ach.name, icon:ach.icon, pts:ach.pts, desc:ach.desc }
+  });
+  renderAchLive();
+});
+dingRuntime.onLBSubmit((lb, formatted, isNewPB, rawValue) => {
+  showLBToast(lb, formatted, isNewPB);
+  renderLBCard();
+  channel?.postMessage({
+    type: 'ding:lb-submit', lbId:lb.id, title:lb.title,
+    value:rawValue, formatted, format:lb.format, lowerIsBetter:lb.lowerIsBetter,
+  });
+  // Persist score to server — anonymous until Step 5 adds auth
+  if (dingRuntime.gameId && lb.id && typeof DingData !== 'undefined') {
+    DingData.submitScore(dingRuntime.gameId, lb.id, rawValue, 'GB')
+      .then(r => { if (r) pushEvent('cpu', `Score submitted: ${lb.title} → ${formatted}`); })
+      .catch(() => {});
+  }
+});
+
+dingRuntime.onStatUpdate((statDef, record, sample) => {
+  // Log the accumulation event to the debug panel — never shown to the player
+  // in a way that implies tracking, just dev-visible confirmation.
+  pushEvent('cpu', `[Stat] ${statDef.title}: ${record.type} → ${record.value}${record.type==='mode'||record.type==='median'?' ('+record.history?.length+' samples)':''}`);
+  // Persist updated records to localStorage after each accumulation.
+  // The key is per-game so records for different games don't collide.
+  const gameKey = 'ding-stats-' + (dingRuntime.gameId ?? 'unknown');
+  try {
+    localStorage.setItem(gameKey, JSON.stringify(dingRuntime.flushStats()));
+  } catch(e) { /* localStorage full or unavailable — non-fatal */ }
+});
+
+// Initial controls card render
+renderControlsCard();
+
+// ROM input
+document.getElementById('rom-input').onchange = e => loadFile(e.target.files[0]);
+document.getElementById('canvas-off').onclick = () => document.getElementById('rom-input').click();
+document.getElementById('screen-wrap').onclick = e => {
+  if (!running && e.target === document.getElementById('screen-wrap') || e.target === document.getElementById('canvas-off'))
+    document.getElementById('rom-input').click();
+};
+
+// Drag and drop
+document.getElementById('screen-wrap').ondragover  = e => { e.preventDefault(); setDrag(true); };
+document.getElementById('screen-wrap').ondragleave = () => setDrag(false);
+document.getElementById('screen-wrap').ondrop      = e => { e.preventDefault(); setDrag(false); loadFile(e.dataTransfer.files[0]); };
+document.getElementById('canvas-off').ondragover   = e => { e.preventDefault(); setDrag(true); };
+document.getElementById('canvas-off').ondragleave  = () => setDrag(false);
+document.getElementById('canvas-off').ondrop       = e => { e.preventDefault(); setDrag(false); loadFile(e.dataTransfer.files[0]); };
+
+</script>
+</body>
+</html>
