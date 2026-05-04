@@ -275,13 +275,18 @@ class PPU {
   get wx()  {return this.mmu.io[0x4B]-7;}
   step(cycles){
     this.frameReady=false;
-    if(!(this.lcdc&0x80)){
-      if(this.ly!==0||this.mode!==0){
-        this.ly=0;this.cycles=0;this.mode=0;this.winLine=0;
-        this.mmu.io[0x41]=(this.mmu.io[0x41]&~3);this.lcdWasOff=true;
-      }
-      return;
-    }
+if(!(this.lcdc&0x80)){
+  if(this.ly!==0||this.mode!==0||!this.lcdWasOff){
+    this.ly=0;this.cycles=0;this.mode=0;this.winLine=0;
+    this.mmu.io[0x41]=(this.mmu.io[0x41]&~3);
+    // Real HW: LCD off = white screen. Fill framebuf with palette[0] and blit.
+    this.pixels.fill(0);
+    this._blit();
+    this.frameReady=true;
+    this.lcdWasOff=true;
+  }
+  return;
+}
     if(this.lcdWasOff){this.lcdWasOff=false;this.ly=0;this.cycles=0;this.winLine=0;this._setMode(2);this._checkLYC();}
     this.cycles+=cycles;
     if(this.mode===2&&this.cycles>=80) {this.cycles-=80;this._setMode(3);}
