@@ -421,8 +421,7 @@ class CPU {
   BIT(b,v){this.zf=((v>>b)&1)?0:1;this.nf=0;this.hf=1;}
   RES(b,v){return v&~(1<<b);}
   SET(b,v){return v|(1<<b);}
-  step(){
-    if(this.pendingIME){this.pendingIME--;if(!this.pendingIME)this.ime=true;}
+ step(){
     const pend=this.mmu.ie&(this.mmu.ifReg&0x1F);
     if(pend){
       this.halted=false;
@@ -435,6 +434,7 @@ class CPU {
         }
       }
     }
+if(this.pendingIME){this.pendingIME--;if(!this.pendingIME)this.ime=true;}
     if(this.halted)return 4;
     const op=this.mmu.read(this.pc);
     if(this.haltBug){this.haltBug=false;}else{this.pc=(this.pc+1)&0xFFFF;}
