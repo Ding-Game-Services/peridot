@@ -1200,6 +1200,13 @@ function dingBuildState(gb) {
   if (!gb) return {};
   const state = {};
   const mmu = gb.mmu;
+  // VRAM 0x8000–0x9FFF (8 KB) — tile data + BG maps ($9800/$9C00)
+  for (let i = 0; i < mmu.vram.length; i++)
+    state['0x' + (0x8000 + i).toString(16).toUpperCase()] = mmu.vram[i];
+  // Cartridge RAM 0xA000–0xBFFF (current bank window, 8 KB)
+  const eramOff = mmu.ramBank * 0x2000;
+  for (let i = 0; i < 0x2000; i++)
+    state['0x' + (0xA000 + i).toString(16).toUpperCase()] = mmu.eram[eramOff + i] ?? 0;
   // WRAM 0xC000–0xDFFF (8 KB)
   for (let i = 0; i < mmu.wram.length; i++)
     state['0x' + (0xC000 + i).toString(16).toUpperCase()] = mmu.wram[i];
