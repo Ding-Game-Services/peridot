@@ -1,0 +1,3 @@
+[submodule "ding-core-sdk"]
+	path = ding-core-sdk
+	url = https://github.com/Ding-Game-Services/ding-core-sdk
