@@ -619,7 +619,7 @@ if(this.pendingIME){this.pendingIME--;if(!this.pendingIME)this.ime=true;}
       case 0xF8:{const e=this.rb(),s=e>127?e-256:e;this.hf=((this.sp&0xF)+(e&0xF))>0xF?1:0;this.cf=((this.sp&0xFF)+(e&0xFF))>0xFF?1:0;this.hl=(this.sp+s)&0xFFFF;this.zf=0;this.nf=0;return 12;}
       case 0xF9:this.sp=this.hl;return 8;
       case 0xFA:this.a=m.read(this.rw());return 16;
-      case 0xFB:this.pendingIME=2;return 4;
+      case 0xFB:this.pendingIME=1;return 4;
       case 0xFE:this.CP(this.rb());return 8;
       case 0xFF:this.push(this.pc);this.pc=0x38;return 16;
       default:return 4;
