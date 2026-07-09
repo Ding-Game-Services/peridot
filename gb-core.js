@@ -18,7 +18,7 @@
 //   gb.saveState()           — serialisable state snapshot
 //   gb.loadState(s)          — restore from snapshot
 //   dingBuildState(gb)       — flat address→value map for D!NG engine
-//   md5(arrayBuffer)         — uppercase hex MD5 of ROM bytes
+//   md5(arrayBuffer)         — uppercase hex MD5 of ROM bytes (from md5.js, loaded first)
 //   romHeaderTitle(buf)      — null-terminated title from header bytes
 //
 // Button index map (matches JOYPAD register bit positions):
@@ -33,11 +33,117 @@ const GB_W = 160, GB_H = 144, GB_SCALE = 3;
 const GB_CYCLES_PER_FRAME = 70224;
 
 const PALETTES = {
-  classic: { label: 'DMG',    colors: [[155,188,15],[139,172,15],[48,98,48],[15,56,15]] },
-  pocket:  { label: 'Pocket', colors: [[200,200,168],[160,160,120],[88,88,56],[24,24,8]] },
-  amber:   { label: 'Amber',  colors: [[255,198,80],[200,130,20],[120,60,0],[40,15,0]] },
-  kirby:   { label: 'Kirby',  colors: [[255,200,220],[240,120,160],[180,40,100],[80,0,40]] },
-};
+  // ── Standard ────────────────────────────────────────────────────────────────
+  classic: { label: 'DMG',           colors: [[155,188,15],[139,172,15],[48,98,48],[15,56,15]] },
+  pocket:  { label: 'Pocket',        colors: [[200,200,168],[160,160,120],[88,88,56],[24,24,8]] },
+  amber:   { label: 'Amber',         colors: [[255,198,80],[200,130,20],[120,60,0],[40,15,0]] },
+  teal:    { label: 'Teal',          colors: [[180,235,230],[80,185,180],[20,110,110],[0,40,45]] },
+  atomic:  { label: 'Atomic Purple', colors: [[220,200,255],[155,120,220],[80,40,160],[25,5,60]] },
+  // ── Special (unlocked per game) ─────────────────────────────────────────────
+  kirby:   { label: 'Puffball Pink', colors: [[255,200,220],[240,120,160],[180,40,100],[80,0,40]],  special: true, gameIds: [3,11,12,17,22] },
+  ashred:  { label: 'Ash Red',       colors: [[255,180,160],[220,80,60],[140,20,10],[50,0,0]],      special: true, gameIds: [6] },
+  garyblue:{ label: 'Gary Blue',     colors: [[180,210,255],[80,140,230],[20,60,160],[0,10,60]],    special: true, gameIds: [5] },
+  pikayellow:{ label: 'Electric Yellow', colors: [[255,245,140],[230,200,20],[160,120,0],[55,35,0]], special: true, gameIds: [16] },
+  razorgreen:{ label: 'Razor Green', colors: [[180,240,160],[60,180,60],[10,100,20],[0,30,5]],      special: true, gameIds: [117] },
+  bananayellow:{ label: 'Banana Yellow', colors: [[255,240,120],[220,185,30],[140,100,0],[45,25,0]], special: true, gameIds: [14,105,144] },
+};;
+
+// ═══════════════════════════════════════════════
+// SERIAL DEVICES
+// ═══════════════════════════════════════════════
+// The GB serial port is shared by two logical peripherals: the printer and
+// the link cable. Real hardware only has one physical port, so we emulate a
+// device chain - each byte the CPU shifts out is offered to devices in order.
+// A device either claims the exchange (returns the byte it shifts back) or
+// declines (returns null) and lets the next device in the chain try.
+// This lets a game freely address the printer AND (later) a link-cable/netplay
+// peer without needing to know which one is actually plugged in.
+class LinkCableStub {
+  // Placeholder for future netplay link-cable support. Nothing is plugged in
+  // yet, so it always declines - the port falls back to today's disconnected
+  // response (0xFF). Swap for a real LinkCableDevice once netplay lands.
+  exchangeByte(outByte) { return null; }
+}
+
+// ═══════════════════════════════════════════════
+// Game Boy Printer emulation. Implements the real GBP serial protocol:
+// sync(0x88,0x33) -> command -> compression flag -> data length (16-bit LE)
+// -> payload -> checksum (16-bit LE) -> 2 status-exchange bytes.
+// Commands: 0x01=INIT (clear buffer), 0x02=PRINT (render+emit), 0x04=DATA (append
+// tile bytes, optionally RLE-compressed), 0x0F=STATUS (no-op, just reports status).
+class PrinterDevice {
+  constructor() { this.reset(); this.onImage = null; }
+  reset() {
+    this.state='sync1'; this.cmd=0; this.compression=0; this.dataLen=0; this.dataRead=0;
+    this.payload=[]; this.tileBuffer=[]; this.statusByte=0x00;
+  }
+  exchangeByte(outByte) {
+    switch(this.state) {
+      case 'sync1':
+        if(outByte===0x88){ this.state='sync2'; return 0x00; }
+        return null; // not printer traffic - let the link-cable slot have it
+      case 'sync2':
+        if(outByte===0x33){ this.state='cmd'; return 0x00; }
+        this.state='sync1'; return null;
+      case 'cmd':      this.cmd=outByte;            this.state='comp';  return 0x00;
+      case 'comp':     this.compression=outByte;    this.state='lenLo'; return 0x00;
+      case 'lenLo':    this.dataLen=outByte;        this.state='lenHi'; return 0x00;
+      case 'lenHi':
+        this.dataLen|=(outByte<<8); this.payload=[]; this.dataRead=0;
+        this.state = this.dataLen>0 ? 'data' : 'ck1';
+        return 0x00;
+      case 'data':
+        this.payload.push(outByte); this.dataRead++;
+        if(this.dataRead>=this.dataLen) this.state='ck1';
+        return 0x00;
+      case 'ck1': this.state='ck2';    return 0x00;
+      case 'ck2': this.state='alive';  return 0x00;
+      case 'alive':
+        this._handleCommand(); this.state='status';
+        return 0x81; // "printer present" marker
+      case 'status':
+        this.state='sync1';
+        return this.statusByte;
+    }
+    return null;
+  }
+  _decompress(bytes) {
+    if(!this.compression) return bytes;
+    const out=[]; let i=0;
+    while(i<bytes.length){
+      const ctrl=bytes[i++];
+      if((ctrl&0x80)===0){ const n=(ctrl&0x7F)+1; for(let k=0;k<n&&i<bytes.length;k++) out.push(bytes[i++]); }
+      else { const n=(ctrl&0x7F)+2; const v=bytes[i++]; for(let k=0;k<n;k++) out.push(v); }
+    }
+    return out;
+  }
+  _handleCommand() {
+    if(this.cmd===0x01){ this.tileBuffer=[]; this.statusByte=0x00; return; }
+    if(this.cmd===0x04){ for(const b of this._decompress(this.payload)) this.tileBuffer.push(b); this.statusByte=0x00; return; }
+    if(this.cmd===0x02){ this._renderAndEmit(); this.statusByte=0x00; return; }
+    // 0x0F STATUS or anything else: just report current statusByte, nothing to do
+  }
+  _renderAndEmit() {
+    const tileCount = this.tileBuffer.length>>4; // 16 bytes per 8x8 2bpp tile
+    if(tileCount<=0){ this.tileBuffer=[]; return; }
+    const tilesWide=20, rows=Math.ceil(tileCount/tilesWide), w=tilesWide*8, h=rows*8;
+    const shades=[0xFF,0xAA,0x55,0x00]; // DMG-style greyscale; frontend can recolor if desired
+    const px=new Uint8ClampedArray(w*h*4);
+    for(let t=0;t<tileCount;t++){
+      const tx=(t%tilesWide)*8, ty=Math.floor(t/tilesWide)*8;
+      for(let row=0;row<8;row++){
+        const lo=this.tileBuffer[t*16+row*2], hi=this.tileBuffer[t*16+row*2+1];
+        for(let col=0;col<8;col++){
+          const bit=7-col, c=(((hi>>bit)&1)<<1)|((lo>>bit)&1), g=shades[c];
+          const idx=((ty+row)*w+(tx+col))*4;
+          px[idx]=g; px[idx+1]=g; px[idx+2]=g; px[idx+3]=255;
+        }
+      }
+    }
+    this.tileBuffer=[];
+    if(typeof this.onImage==='function') this.onImage({ width:w, height:h, pixels:px });
+  }
+}
 
 // ═══════════════════════════════════════════════
 class MMU {
@@ -66,8 +172,16 @@ class MMU {
     this.rtcLatchStep = 0;
     this.rtcSel       = -1;
     this.rtcBase      = Date.now();
-    this.buttons = 0xFF;
-    this.serialCycles = 0;
+ this.buttons = 0xFF;
+ this.serialCycles = 0;
+    // Ordered device chain for the serial port - see LinkCableStub above.
+    // Step 2 will unshift a PrinterDevice to the front of this array; it gets
+    // first refusal on every byte since it needs to recognize its own sync
+    // sequence before the link-cable slot sees anything.
+    this.serialDevices = [ new LinkCableStub() ];
+ this.camRegMode = false;          // MBC-Camera: true = A000-A035 exposes camera regs instead of SRAM
+    this.camRegs    = new Uint8Array(0x36); // MBC-Camera register file
+    this.cameraCapture = null;
     this.apu = null;
     this.timer = null;   // wired up by GameBoy constructor after Timer is created
     this.sramDirty = false;
@@ -90,11 +204,14 @@ class MMU {
     else if (type<=0x03)            this.mbcType=1;
     else if (type<=0x06)            this.mbcType=2;
     else if (type>=0x0F&&type<=0x13) this.mbcType=3;
-    else if (type>=0x19&&type<=0x1E) this.mbcType=5;
+ else if (type>=0x19&&type<=0x1E) this.mbcType=5;
+    else if (type===0xFC)           this.mbcType=6; // Game Boy Camera
     else                            this.mbcType=1;
     const ramBytes=[0,0x800,0x2000,0x8000,0x20000,0x10000][ramSz]||0x8000;
     this.eram=new Uint8Array(Math.max(ramBytes,0x8000));
     this.romBank=1; this.ramBank=0; this.ramEn=false;
+    this.mbc1Mode=0; this.mbc1HiBits=0; this.romLoBank=0;
+    this.camRegMode=false; this.camRegs.fill(0);
     this.mbc1Mode=0; this.mbc1HiBits=0; this.romLoBank=0;
     this.rtcSel=-1; this.rtcLatchStep=0; this.rtcBase=Date.now();
     for(let i=0;i<0x4000&&i<this.fullRom.length;i++) this.romLo[i]=this.fullRom[i];
@@ -121,21 +238,63 @@ class MMU {
     this.rtcRegs[3]=d&0xFF;
     this.rtcRegs[4]=(this.rtcRegs[4]&0xFE)|((d>>8)&1);
   }
-  stepSerial(cycles) {
+stepSerial(cycles) {
     if(!this.serialCycles) return;
     this.serialCycles-=cycles;
     if(this.serialCycles<=0) {
-      this.serialCycles=0; this.io[0x01]=0xFF;
+      this.serialCycles=0;
+      const outByte=this.io[0x01];
+      let inByte=0xFF; // default: nothing attached
+      for(const dev of this.serialDevices){
+        const r=dev.exchangeByte(outByte);
+        if(r!==null){ inByte=r; break; }
+      }
+      this.io[0x01]=inByte;
       this.io[0x02]&=0x7F; this.requestInterrupt(3);
     }
   }
-  requestInterrupt(n) { this.ifReg|=(1<<n); }
+ requestInterrupt(n) { this.ifReg|=(1<<n); }
+  // MBC-Camera: render the current sensor frame into 2bpp tile data at the
+  // start of SRAM bank 0 (0x0000 in eram) — real hardware exposes the
+  // processed photo there for the game to copy into VRAM. 16x14 tiles =
+  // 128x112px, matching the sensor's actual visible capture area.
+  // Simplification note: real hardware also applies configurable edge
+  // enhancement/exposure/gain from camRegs[1..53]; for now we just apply a
+  // fixed 4x4 ordered (Bayer) dither down to the 4 DMG shades. Good enough
+  // to get real webcam images on screen — can be refined later if specific
+  // games need the extra registers respected.
+  _doCameraCapture() {
+    const frame = (typeof this.cameraCapture==='function') ? this.cameraCapture() : null;
+    const W=128, tilesWide=16, tilesTall=14;
+    const bayer4=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+    for(let ty=0;ty<tilesTall;ty++){
+      for(let tx=0;tx<tilesWide;tx++){
+        const base=(ty*tilesWide+tx)*16;
+        for(let row=0;row<8;row++){
+          let lo=0,hi=0;
+          for(let col=0;col<8;col++){
+            const px=tx*8+col, py=ty*8+row;
+            const lum = frame ? frame[py*W+px] : 200; // flat light placeholder if no sensor attached
+            const t = bayer4[py&3][px&3]*16; // 0-240 dither offset
+            let shade;
+            if(lum+t/4 > 240) shade=0; else if(lum+t/4 > 160) shade=1;
+            else if(lum+t/4 > 80) shade=2; else shade=3;
+            const bit=7-col;
+            lo|=((shade&1)<<bit); hi|=(((shade>>1)&1)<<bit);
+          }
+          this.eram[base+row*2]=lo; this.eram[base+row*2+1]=hi;
+        }
+      }
+    }
+    this.camRegs[0]&=~0x01; // capture complete
+  }
   read(addr) {
     addr&=0xFFFF;
     if(addr<0x4000) return this.fullRom?this.romLo[addr]:0xFF;
     if(addr<0x8000) return this.fullRom?this.romHi[addr-0x4000]:0xFF;
     if(addr<0xA000) return this.vram[addr-0x8000];
-    if(addr<0xC000) {
+if(addr<0xC000) {
+      if(this.mbcType===6&&this.camRegMode) { const idx=addr-0xA000; return idx<0x36?this.camRegs[idx]:0x00; }
       if(!this.ramEn) return 0xFF;
       if(this.mbcType===3&&this.rtcSel>=0) return this.rtcLatched[this.rtcSel];
       if(this.mbcType===2) { const idx=(addr-0xA000)&0x01FF; return 0xF0|(this.eram[idx]&0x0F); }
@@ -170,11 +329,20 @@ class MMU {
         case 2:
           if(addr<0x4000){if(addr&0x0100){let b=val&0x0F;if(!b)b=1;this._bankHi(b);}else{this.ramEn=(val&0x0F)===0x0A;}}
           break;
-        case 5:
+case 5:
           if(addr<0x2000){this.ramEn=(val&0xF)===0xA;}
           else if(addr<0x3000){this._bankHi((this.romBank&0x100)|val);}
           else if(addr<0x4000){this._bankHi((this.romBank&0xFF)|((val&1)<<8));}
           else if(addr<0x6000){this.ramBank=val&0x0F;}
+          break;
+case 6: // MBC-Camera
+          if(addr<0x2000){this.ramEn=(val&0x0F)===0x0A;}
+          else if(addr<0x4000){let b=val&0x3F;if(!b)b=1;this._bankHi(b);}
+          else if(addr<0x6000){
+            // RAMB register (actually at 4000-5FFF, not 0000-1FFF): 0x10 = expose
+            // camera registers at A000-A035, else selects one of 16 SRAM banks.
+            if(val===0x10){this.camRegMode=true;} else {this.camRegMode=false; this.ramBank=val&0x0F;}
+          }
           break;
         default: break;
       }
@@ -182,6 +350,14 @@ class MMU {
     }
     if(addr<0xA000){this.vram[addr-0x8000]=val;return;}
     if(addr<0xC000){
+if(this.mbcType===6&&this.camRegMode){
+        const idx=addr-0xA000;
+        if(idx<0x36){
+          this.camRegs[idx]=val;
+          if(idx===0&&(val&0x01)) this._doCameraCapture();
+        }
+        return;
+      }
       if(!this.ramEn) return;
       if(this.mbcType===3&&this.rtcSel>=0){this.rtcRegs[this.rtcSel]=val;return;}
       if(this.mbcType===2){this.eram[(addr-0xA000)&0x01FF]=val&0x0F;this.sramDirty=true;return;}
@@ -729,12 +905,16 @@ class APU {
         R[i] = this.lastR;
       }
     };
-    this.node.connect(this.ctx.destination);
+    this.gainNode = this.ctx.createGain();
+    this.gainNode.gain.value = 1.0;
+    this.node.connect(this.gainNode);
+    this.gainNode.connect(this.ctx.destination);
   }
 
   stopAudio(){
-    if (this.node) { try { this.node.disconnect(); } catch(e){} this.node = null; }
-    if (this.ctx)  { try { this.ctx.close();       } catch(e){} this.ctx  = null; }
+if (this.node)     { try { this.node.disconnect();     } catch(e){} this.node     = null; }
+    if (this.gainNode) { try { this.gainNode.disconnect(); } catch(e){} this.gainNode = null; }
+    if (this.ctx)      { try { this.ctx.close();           } catch(e){} this.ctx      = null; }
     this.bufWrite = 0;
     this.bufRead  = 0;
     this.lastL    = 0;
@@ -1096,6 +1276,10 @@ class GameBoy {
     this.mmu=new MMU(); this.ppu=new PPU(this.mmu);
     this.cpu=new CPU(this.mmu); this.timer=new Timer(this.mmu);
     this.apu=new APU(this.mmu); this.mmu.apu=this.apu; this.mmu.timer=this.timer;
+    // Printer always claims first refusal on serial bytes so it can recognize
+    // its own sync sequence before the link-cable slot ever sees anything.
+    this.printer = new PrinterDevice();
+    this.mmu.serialDevices.unshift(this.printer);
   }
   loadROM(buf){this.mmu.loadROM(buf);}
   runFrame(){
@@ -1134,9 +1318,10 @@ class GameBoy {
                pendingIME:cpu.pendingIME, haltBug:cpu.haltBug },
       timer: { div:timer.div },
       ppu:   { cycles:ppu.cycles, mode:ppu.mode, winLine:ppu.winLine, lcdWasOff:ppu.lcdWasOff },
-      mmu:   { ie:mmu.ie, ifReg:mmu.ifReg, romBank:mmu.romBank, ramBank:mmu.ramBank,
+mmu:   { ie:mmu.ie, ifReg:mmu.ifReg, romBank:mmu.romBank, ramBank:mmu.ramBank,
                ramEn:mmu.ramEn, mbc1Mode:mmu.mbc1Mode, mbc1HiBits:mmu.mbc1HiBits,
                romLoBank:mmu.romLoBank, rtcSel:mmu.rtcSel, rtcLatchStep:mmu.rtcLatchStep,
+               camRegMode:mmu.camRegMode, camRegs:Array.from(mmu.camRegs),
                wram:   Array.from(mmu.wram),
                vram:   Array.from(mmu.vram),
                oam:    Array.from(mmu.oam),
@@ -1164,7 +1349,8 @@ class GameBoy {
     const m = s.mmu;
     mmu.ie=m.ie; mmu.ifReg=m.ifReg; mmu.romBank=m.romBank; mmu.ramBank=m.ramBank;
     mmu.ramEn=m.ramEn; mmu.mbc1Mode=m.mbc1Mode; mmu.mbc1HiBits=m.mbc1HiBits;
-    mmu.romLoBank=m.romLoBank; mmu.rtcSel=m.rtcSel; mmu.rtcLatchStep=m.rtcLatchStep;
+ mmu.romLoBank=m.romLoBank; mmu.rtcSel=m.rtcSel; mmu.rtcLatchStep=m.rtcLatchStep;
+    mmu.camRegMode=!!m.camRegMode; if(m.camRegs) mmu.camRegs.set(m.camRegs);
     // MMU arrays
     mmu.wram.set(m.wram);  mmu.vram.set(m.vram);
     mmu.oam.set(m.oam);    mmu.hram.set(m.hram);
@@ -1231,60 +1417,9 @@ function dingBuildState(gb) {
   return state;
 }
 
-// Pure JS MD5, RFC 1321. No external deps, no GPL.
-// Returns uppercase 32-char hex.
-const MD5_T = new Uint32Array(64);
-for (let i = 0; i < 64; i++)
-  MD5_T[i] = (Math.abs(Math.sin(i + 1)) * 0x100000000) >>> 0;
+// md5() is provided by md5.js, loaded before this file. See header comment at top.
 
-const MD5_S = [
-   7,12,17,22,  7,12,17,22,  7,12,17,22,  7,12,17,22,
-   5, 9,14,20,  5, 9,14,20,  5, 9,14,20,  5, 9,14,20,
-   4,11,16,23,  4,11,16,23,  4,11,16,23,  4,11,16,23,
-   6,10,15,21,  6,10,15,21,  6,10,15,21,  6,10,15,21,
-];
-
-function md5(buf) {
-  const bytes  = new Uint8Array(buf);
-  const msgLen = bytes.length;
-  const bitLo  = (msgLen * 8) >>> 0;
-  const bitHi  = Math.floor(msgLen / 0x20000000) >>> 0;
-  const padLen = ((msgLen % 64) < 56) ? (56 - msgLen % 64) : (120 - msgLen % 64);
-  const padded = new Uint8Array(msgLen + padLen + 8);
-  padded.set(bytes);
-  padded[msgLen] = 0x80;
-  padded[msgLen + padLen    ] = (bitLo)        & 0xFF;
-  padded[msgLen + padLen + 1] = (bitLo >>>  8) & 0xFF;
-  padded[msgLen + padLen + 2] = (bitLo >>> 16) & 0xFF;
-  padded[msgLen + padLen + 3] = (bitLo >>> 24) & 0xFF;
-  padded[msgLen + padLen + 4] = (bitHi)        & 0xFF;
-  padded[msgLen + padLen + 5] = (bitHi >>>  8) & 0xFF;
-  padded[msgLen + padLen + 6] = (bitHi >>> 16) & 0xFF;
-  padded[msgLen + padLen + 7] = (bitHi >>> 24) & 0xFF;
-  let a0 = 0x67452301, b0 = 0xEFCDAB89, c0 = 0x98BADCFE, d0 = 0x10325476;
-  const M = new Uint32Array(16);
-  for (let off = 0; off < padded.length; off += 64) {
-    for (let j = 0; j < 16; j++)
-      M[j] = padded[off+j*4] | (padded[off+j*4+1]<<8) |
-              (padded[off+j*4+2]<<16) | (padded[off+j*4+3]<<24);
-    let A = a0, B = b0, C = c0, D = d0;
-    for (let i = 0; i < 64; i++) {
-      let F, g;
-      if      (i < 16) { F = (B & C) | (~B & D); g = i; }
-      else if (i < 32) { F = (D & B) | (~D & C); g = (5*i+1) % 16; }
-      else if (i < 48) { F = B ^ C ^ D;           g = (3*i+5) % 16; }
-      else             { F = C ^ (B | ~D);         g = (7*i)   % 16; }
-      F = (F + A + MD5_T[i] + M[g]) >>> 0;
-      A = D; D = C; C = B;
-      B = (B + ((F << MD5_S[i]) | (F >>> (32 - MD5_S[i])))) >>> 0;
-    }
-    a0 = (a0+A)>>>0; b0 = (b0+B)>>>0; c0 = (c0+C)>>>0; d0 = (d0+D)>>>0;
-  }
-  const le = v => [v,v>>>8,v>>>16,v>>>24].map(b => (b&0xFF).toString(16).padStart(2,'0')).join('');
-  return (le(a0) + le(b0) + le(c0) + le(d0)).toUpperCase();
-}
-
-// Extract the ROM header title (bytes 0x0134–0x0143, null-terminated ASCII).
+// Extract the ROM header title
 function romHeaderTitle(buf) {
   const bytes = new Uint8Array(buf);
   let title = '';
