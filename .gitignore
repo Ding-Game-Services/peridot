@@ -1,3 +1,5 @@
 backups/gb-core.js
 GameBoyProgManVer1.1_djvu.txt
 activate-emsdk.bat
+/build
+/build-wasm
